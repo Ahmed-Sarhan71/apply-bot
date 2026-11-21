@@ -1,0 +1,23 @@
+🚀 We're Hiring | Senior AWS Data Engineer
+We're looking for a Senior AWS Data Engineer (5+ Years of Experience) to join our team and work on scalable data pipelines supporting Document & Image Processing and AI/ML solutions.
+🔹 What You'll Be Doing:
+Develop and maintain data ingestion and transformation pipelines using Python and AWS.
+Process and structure metadata extracted from images and documents.
+Design and optimize MongoDB data models and collections.
+Build automated, event-driven workflows using AWS Lambda.
+Prepare clean, validated datasets for Data Science and ML models.
+Support data integration and POC initiatives.
+🔹 What We're Looking For:
+5+ years of experience in Data Engineering.
+Strong hands-on experience with Python and SQL.
+Solid experience with AWS services, particularly Lambda and S3.
+Experience building ETL/ELT pipelines.
+Strong knowledge of MongoDB and NoSQL data modeling.
+Experience handling unstructured data (Images & Documents).
+Understanding of OCR, metadata extraction, and ML data preparation.
+Experience with REST APIs and data integration.
+
+Location: Egypt - Hybrid
+
+📩 Interested or know someone who might be a great fit?
+Feel free to share your updated CV via DM Shaymaa Basiuny or email at shaymaa.basiuny@flairstech.com

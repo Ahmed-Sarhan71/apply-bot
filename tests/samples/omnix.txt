@@ -1,0 +1,31 @@
+Omnix is hiring: Senior AI/ML Engineer
+We’re looking for a Senior AI/ML Engineer to design, build, and govern enterprise-grade AI solutions across Machine Learning, Generative AI, and Agentic AI.
+ 
+The Role
+Own the full AI lifecycle, from model development to production deployment, governance, and security. You’ll build real systems, not just POCs.
+ 
+What You’ll Do
+→ Build ML/DL models for NLP, computer vision, and predictive analytics
+ → Develop LLM apps, RAG pipelines, and AI copilots
+ → Design multi-agent systems with orchestration, memory, and tool calling
+ → Set up CI/CD and observability for AI models and agents (MLOps/LLMOps/AgentOps)
+ → Implement AI governance, guardrails, and Responsible AI practices
+ 
+Tech Stack
+LLMs • RAG • LangChain • LangGraph • CrewAI • AutoGen • Semantic Kernel • LlamaIndex • PyTorch • TensorFlow • Hugging Face • Azure AI Foundry • AWS Bedrock • SageMaker • Google Vertex AI • Docker • Kubernetes • Terraform • Vector DBs • FastAPI • MLflow • Kubeflow
+ 
+To Get Shortlisted, You Need
+✅ 5+ years in software/AI-ML engineering, with 3+ years running production AI systems
+ ✅ Strong Python and solid software engineering fundamentals
+ ✅ Hands-on experience with LLMs, RAG, and agentic frameworks (LangGraph, CrewAI, AutoGen, or similar)
+ ✅ Exposure to AI governance, security, and Responsible AI practices
+ ✅ Bachelor’s/Master’s in CS, AI, ML, or Data Science; relevant certifications (Azure OpenAI, AWS/Azure ML, CKA/CKAD) a strong plus
+ ✅ Arabic language skills preferred
+ ✅ Notice period less than 30 days (non-negotiable due to business timeline)
+ 
+📩 Interested? Share your CV at omnix.career@omnix.com with the subject line “Senior AI/ML Engineer”
+ 
+⚠️ Only shortlisted profiles will be contacted for screening and interviews.
+ 
+#Hiring #AIEngineer
+ 
