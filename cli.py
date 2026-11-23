@@ -23,6 +23,13 @@ from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.table import Table
 
+from ai.candidate_matcher import (
+    CandidateContext,
+    MatcherError,
+    MatchResult,
+    load_candidate_context,
+    match_candidate,
+)
 from ai.job_analyzer import AnalyzerError, JobAnalysis, analyze_job
 
 console = Console()
@@ -85,7 +92,21 @@ def show_result(a: JobAnalysis, as_json: bool) -> None:
         console.print_json(a.model_dump_json())
 
 
-def run_batch(raw: str, seen: set[str], as_json: bool) -> None:
+def show_match(m: MatchResult, as_json: bool) -> None:
+    picks = "\n".join(f"  {i}. [bold]{p.name}[/]\n     [dim]{p.reason}[/]" for i, p in enumerate(m.selected_projects, 1))
+    body = (
+        f"[bold]projects to feature:[/]\n{picks or '  -'}\n"
+        f"[green]matched skills:[/] {', '.join(s.skill for s in m.matched_skills) or '-'}\n"
+        f"[red]missing skills (never claim):[/] {', '.join(m.missing_skills) or '-'}\n"
+        f"experience: {m.experience_note or '-'}\n"
+        f"[bold]email angle:[/] {m.email_angle or '-'}"
+    )
+    console.print(Panel(body, title="match", border_style="blue"))
+    if as_json:
+        console.print_json(m.model_dump_json())
+
+
+def run_batch(raw: str, seen: set[str], as_json: bool, ctx: CandidateContext | None = None) -> None:
     posts = split_posts(raw)
     if not posts:
         log.warning("nothing pasted")
@@ -114,11 +135,25 @@ def run_batch(raw: str, seen: set[str], as_json: bool) -> None:
             continue
         log.info("post %d done in %.1fs", i, time.perf_counter() - started)
         show_result(a, as_json)
+        projects = "-"
+        if ctx is not None:
+            try:
+                m = match_candidate(a, ctx)
+                show_match(m, as_json)
+                projects = ", ".join(str(p.project_id) for p in m.selected_projects) or "-"
+            except MatcherError as e:
+                log.error("matching FAILED: %s", e)
+                projects = "[red]failed[/]"
+            except Exception as e:
+                log.error("unexpected matcher error: %s: %s", type(e).__name__, e)
+                projects = "[red]error[/]"
         verdict = "[green]ready[/]" if a.can_auto_apply else "[yellow]no email[/]"
-        rows.append((i, f"{a.role_title or '?'} / {a.company or '?'}", verdict, a.apply_method, a.apply_email or "-"))
+        rows.append(
+            (i, f"{a.role_title or '?'} / {a.company or '?'}", verdict, a.apply_method, a.apply_email or "-", projects)
+        )
 
     table = Table(title="batch summary")
-    for col in ("#", "job", "result", "apply via", "email"):
+    for col in ("#", "job", "result", "apply via", "email", "projects"):
         table.add_column(col)
     for r in rows:
         table.add_row(*[str(x) for x in r])
@@ -130,6 +165,8 @@ def main() -> None:
     parser.add_argument("-f", "--file", help="read posts from a file instead of pasting")
     parser.add_argument("--json", action="store_true", help="print the full JSON for each post")
     parser.add_argument("-q", "--quiet", action="store_true", help="hide step-by-step logs")
+    parser.add_argument("--context", default="context", help="folder with the resume PDF and project_cards.md")
+    parser.add_argument("--no-match", action="store_true", help="skip the candidate matcher")
     args = parser.parse_args()
 
     load_dotenv()
@@ -149,17 +186,24 @@ def main() -> None:
         sys.exit(1)
     log.info("model: %s", os.environ.get("DEEPSEEK_MODEL", "deepseek-flash"))
 
+    ctx = None
+    if not args.no_match:
+        try:
+            ctx = load_candidate_context(args.context)
+        except (FileNotFoundError, ValueError) as e:
+            log.error("matcher disabled: %s", e)
+
     seen: set[str] = set()
     if args.file:
         with open(args.file, encoding="utf-8") as f:
-            run_batch(f.read(), seen, args.json)
+            run_batch(f.read(), seen, args.json, ctx)
         return
     while True:
         raw = read_paste()
         if raw is None:
             console.print("bye")
             return
-        run_batch(raw, seen, args.json)
+        run_batch(raw, seen, args.json, ctx)
 
 
 if __name__ == "__main__":

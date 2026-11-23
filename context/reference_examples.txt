@@ -1,0 +1,135 @@
+1- job post
+    🚀 AI Engineer Associate | QueryNest.ai
+QueryNest.ai is hiring an AI Engineer Associate for a full-time, fully remote role (with the team based in Islamabad). This role is an incredible match for your exact transition path—combining Python/FastAPI backend work with LLMs, RAG pipelines, and AI agent workflows!
+📌 Job Details:
+ * 🏢 Company: QueryNest.ai
+ * 💼 Position: AI Engineer Associate
+ * 📍 Work Mode: Fully remote (team based in Islamabad)
+ * ⏱️ Job Type: Full-time
+📋 What You'll Work On:
+ * LLM-powered features with OpenAI / Azure OpenAI, Groq, and open-source models.
+ * RAG pipelines over documents and databases.
+ * AI agents and tool-calling workflows—including chat, voice, and browser automation.
+ * Backend services and APIs in Python (FastAPI).
+🎯 What They're Looking For:
+ * Experience: 0–2 years of experience; fresh graduates with strong projects are welcome.
+ * Core Skills: Good Python skills and understanding of machine learning and LLM fundamentals.
+ * Portfolio: Hands-on projects with LLM APIs, RAG, or AI chatbots (via GitHub or portfolio).
+ * Mindset: A problem-solving mindset and eagerness to learn quickly.
+🔗 How to Apply:
+ * Apply through the link: https://lnkd.in/eAtWy5t2
+
+ 1- email
+ Dear QueryNest.ai Hiring Team,
+
+I’m writing to apply for the AI Engineer Associate position. I hold a Bachelor’s degree in Computer Engineering and have hands-on experience building AI applications, RAG systems, Python backends, and AI-powered automation workflows.
+
+A few relevant projects from my portfolio include:
+
+- **AI Research Assistant:** Built a document-question-answering RAG application using FastAPI, Qdrant, Ollama, and local LLMs, with PDF ingestion and source-based retrieval.
+- **AI Workflow Automation:** Developed n8n workflows integrating databases, AI agents, and automated business decision-making.
+- **Diabetic Foot Ulcer Classification:** Developed a PyTorch-based image classification system for infection and ischaemia assessment.
+- **Candy Calorie Counter:** Built a computer vision application using Python, YOLO11, OpenCV, and Streamlit.
+
+I also have experience with REST APIs, Linux environments, and AI-agent orchestration. I’m particularly interested in building reliable LLM-powered applications, improving retrieval pipelines, and developing agent workflows that use tools to complete tasks.
+
+You can explore my work here:
+
+- **Portfolio:** https://www.ahmedsarhan.space/
+- **LinkedIn:** https://www.linkedin.com/in/ahmed-sarhan01/
+
+I’ve attached my updated CV for your consideration. Thank you for your time, and I’d welcome the opportunity to discuss how my skills and projects align with your team’s needs.
+
+Best regards,
+Ahmed Sarhan
+
+
+2- job post
+
+We're Hiring: Frontend Developer
+
+SimpleWay for Digital Solutions is looking for a talented Frontend Developer to join our team
+
+Location: Cairo, Egypt
+Work Model: Hybrid
+Employment Type: Full-time
+
+Key Requirements:
+
+- Strong experience with React.js, JavaScript, HTML, and CSS.
+-Experience building responsive, user-friendly web applications.
+- Familiarity with API integration and collaboration with Back-End developers.
+-Knowledge of version control, debugging, testing, and performance optimization.
+- Strong problem-solving, communication, and teamwork skills.
+-Experience with enterprise applications and digital transformation solutions is a plus.
+
+Interested or know someone who would be a great fit? Comment Interested or share your CV through DM or share your CV by Mail to khaled.abusen@esimpleway.com
+
+2-email
+Dear Hiring Team,
+
+I’m applying for the Frontend Developer position at SimpleWay for Digital Solutions. I hold a Bachelor’s degree in Computer Engineering and have hands-on experience building web applications using HTML, CSS, JavaScript, and Angular, along with integrating REST APIs and working with backend services.
+
+My relevant experience includes:
+
+- **Tennis Fusion:** Developed an e-commerce frontend using Angular 20, Angular Material, and Tailwind CSS, implementing responsive interfaces, product search and filtering, cart functionality, authentication, and checkout.
+- **API Integration:** Connected frontend applications to ASP.NET Core APIs and worked with backend services and database-driven features.
+- **Web Development Instruction:** Taught HTML, CSS, and JavaScript, helping learners understand frontend fundamentals and troubleshoot their code.
+
+I also have experience with Git, debugging, and full-stack development. My strongest framework experience is Angular rather than React, but I’m ready to build on my JavaScript and frontend foundations to work with React.
+
+Portfolio: https://www.ahmedsarhan.space/
+
+LinkedIn: https://www.linkedin.com/in/ahmed-sarhan01/
+
+I’ve attached my updated CV for your consideration. Thank you for your time.
+
+Best regards,
+Ahmed Sarhan
+
+3- job post
+📢 We’re Hiring: Junior Big Data Administrator | Hybrid
+
+🔹Requirements:
+-Fresh graduate or 0–1 year of experience in a related role.
+-Basic Linux administration and command-line operations.
+-Understanding of operating systems, processes, memory, filesystems, and permissions.
+-Basic networking knowledge (TCP/IP, DNS, ports, and connectivity troubleshooting).
+-Basic Bash scripting; Python is a plus.
+-Basic SQL and database concepts.
+-Preferred: Academic or internship exposure to Hadoop, Spark, Kafka, Airflow, Git, Linux servers, monitoring tools, and Big Data architecture.2.
+
+🔹Job Responsibilities:
+-Assist in monitoring Cloudera Data Platform (CDP) and Hadoop ecosystem services.
+-Perform routine health checks for HDFS storage, YARN resources, and service availability.
+-Assist in troubleshooting Hive, HiveServer2, Hive Metastore, Impala, and Kafka.
+-Monitor Airflow services and investigate failed DAGs and tasks.
+-Support Production and Disaster Recovery (DR) monitoring and replication checks.
+-Review system and application logs, document incidents, and escalate issues when necessary.
+-Follow operational procedures and assist with routine maintenance and automation under the guidance of senior engineers.
+
+📩 Interested? please send your CV to Salma.ashraf@fawry.com and mention the title in the subject line.
+#Hiring #JuniorDataEngineer #DataEngineering #BigData #Careers #Linux #Hadoop #Cloudera #FreshGraduates #JobOpportunity
+
+3- email
+Dear Salma,
+
+I’m applying for the Junior Big Data Administrator position at Fawry. I hold a Bachelor’s degree in Computer Engineering and have hands-on experience with Linux administration, Python, SQL, server configuration, and technical troubleshooting.
+
+My relevant experience includes:
+
+- **Linux Server Administration:** Set up and maintained a self-hosted Nextcloud server on Linux, configuring Apache, PHP, MariaDB, and Tailscale while troubleshooting service, networking, and storage issues.
+- **Systems & Automation Engineering:** Configured and secured Linux VPS environments and developed automation workflows to streamline operational processes.
+- **Database & Data Processing:** Worked with SQL Server, Python-based data processing, and API integration through software and AI projects.
+- **Technical Support:** Investigate technical issues, use diagnostic tools, document cases, and escalate unresolved problems when necessary.
+
+I’m comfortable with Linux command-line operations and systematic troubleshooting. Although I haven’t worked directly with Cloudera or Hadoop in a professional environment, I’m eager to learn the Hadoop ecosystem, service monitoring, and production operations.
+
+Portfolio: [https://www.ahmedsarhan.space/](https://www.ahmedsarhan.space/)
+
+LinkedIn: [https://www.linkedin.com/in/ahmed-sarhan01/](https://www.linkedin.com/in/ahmed-sarhan01/)
+
+I’ve attached my updated CV for your consideration. Thank you for your time.
+
+Best regards,\
+Ahmed Sarhan
