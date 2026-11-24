@@ -6,7 +6,7 @@ import path from "node:path";
 export const DB_PATH =
   process.env.APPLYBOT_DB ?? path.join(process.cwd(), "..", "data", "applications.db");
 
-export const STATUSES = ["sent", "replied", "rejected", "no_reply"] as const;
+export const STATUSES = ["sent", "replied", "rejected"] as const;
 export type Status = (typeof STATUSES)[number];
 
 export type Application = {

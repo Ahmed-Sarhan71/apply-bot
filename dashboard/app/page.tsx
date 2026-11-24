@@ -7,7 +7,6 @@ const BADGE: Record<Status, string> = {
   sent: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
   replied: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200",
   rejected: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
-  no_reply: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
 };
 
 function formatDate(iso: string) {
@@ -19,7 +18,7 @@ function formatDate(iso: string) {
 
 function Card({ app }: { app: Application }) {
   return (
-    <article className="rounded-xl border border-black/10 p-5 dark:border-white/15">
+    <article id={String(app.id)} className="rounded-xl border border-black/10 p-5 dark:border-white/15">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold">{app.role_title ?? "Unknown role"}</h2>
@@ -82,7 +81,7 @@ export default async function Page() {
     <main className="mx-auto w-full max-w-4xl px-6 py-10">
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Job applications</h1>
+          <h1 className="text-2xl font-semibold">All Applications</h1>
           <p className="mt-1 text-sm opacity-70">
             {apps.length} total · {replied} replied · {rejected} rejected
           </p>

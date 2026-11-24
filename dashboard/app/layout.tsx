@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeToggle } from "./theme-toggle";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -22,8 +23,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {/* set the stored theme before paint, so dark mode doesn't flash light */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "try{if(localStorage.theme==='dark')document.documentElement.classList.add('dark')}catch(e){}",
+          }}
+        />
+        <div className="fixed top-4 right-4 z-10">
+          <ThemeToggle />
+        </div>
+        {children}
+      </body>
     </html>
   );
 }

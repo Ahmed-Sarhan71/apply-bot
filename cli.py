@@ -110,11 +110,12 @@ def show_match(m: MatchResult, as_json: bool) -> None:
         console.print_json(m.model_dump_json())
 
 
-def show_email(d: EmailDraft, to: str | None, as_json: bool) -> None:
+def show_email(d: EmailDraft, to: str | None, as_json: bool, send: bool = False) -> None:
     head = f"[bold]To:[/] {to or '-'}\n[bold]Subject:[/] {d.subject}\n\n"
     from rich.markup import escape  # so [brackets] inside the email are not read as styling
 
-    console.print(Panel(head + escape(d.text()), title=f"email draft: {d.word_count()} words", border_style="magenta"))
+    title = f"email draft: {d.word_count()} words" + ("" if send else " — NOT SENT, no --send")
+    console.print(Panel(head + escape(d.text()), title=title, border_style="magenta"))
     if as_json:
         console.print_json(d.model_dump_json())
 
@@ -174,7 +175,7 @@ def run_batch(
                 if style is not None:
                     try:
                         draft = write_email(a, m, ctx, style)
-                        show_email(draft, a.apply_email, as_json)
+                        show_email(draft, a.apply_email, as_json, send)
                         drafted = "[green]drafted[/]"
                         if send and a.can_auto_apply and a.apply_email:
                             pending.append((draft, a.apply_email, a, text))
