@@ -35,7 +35,7 @@ OTHERS_TAIL = "All of them are on my GitHub and in my portfolio."
 # The candidate's chosen wording for the degree (the resume says "Electronics Engineering ... majoring in Computer").
 DEGREE_FIELD = "Computer Engineering"
 
-MIN_WORDS = 190  # the whole finished email: greeting, body, links, CV line and sign-off
+MIN_WORDS = 180  # the whole finished email: greeting, body, links, CV line and sign-off
 MAX_WORDS = 220
 MAX_BULLETS = 3
 
