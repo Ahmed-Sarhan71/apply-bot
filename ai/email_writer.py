@@ -35,8 +35,8 @@ OTHERS_TAIL = "All of them are on my GitHub and in my portfolio."
 # The candidate's chosen wording for the degree (the resume says "Electronics Engineering ... majoring in Computer").
 DEGREE_FIELD = "Computer Engineering"
 
-MIN_WORDS = 150  # the whole finished email: greeting, body, links, CV line and sign-off
-MAX_WORDS = 180
+MIN_WORDS = 190  # the whole finished email: greeting, body, links, CV line and sign-off
+MAX_WORDS = 220
 MAX_BULLETS = 3
 
 
@@ -58,7 +58,7 @@ Return ONLY a JSON object with exactly these keys:
 
 Rules:
 - Use ONLY facts in the resume and project cards. Never invent skills, tools, employers, projects, results, savings, numbers or years of experience. Never write a number of years (no "2 years of experience"). Use any other number only if it appears in the resume or cards.
-- LENGTH IS STRICT: the finished email (greeting, your text, links, CV line and sign-off) must be 150 to 180 words. About 70 of those words are added automatically (links, CV line, sign-off and two sentences that list the candidate's other projects and say they are on GitHub and in the portfolio), so opening, bullets, acknowledged_gap, closing and why_hire together must be about 85 to 110 words.
+- LENGTH IS STRICT: the finished email (greeting, your text, links, CV line and sign-off) must be 190 to 220 words. About 70 of those words are added automatically (links, CV line, sign-off and two sentences that list the candidate's other projects and say they are on GitHub and in the portfolio), so opening, bullets, acknowledged_gap, closing and why_hire together must be about 120 to 150 words.
 - opening: two sentences. First: "I'm applying for the <role_title> position at <company>." (leave out "at <company>" when the company is null). Second: say the candidate holds a Bachelor's degree in Computer Engineering (always use exactly this wording, even though the resume's EDUCATION section words the degree differently) and builds solutions to the employer's business need, put in plain words from business_need (do not quote it).
 - bullets: 2 or 3 items, NEVER more than 3, best fit first. Prefer the project cards the matcher selected. "label" is the project name in a few words. "text" is ONE sentence of at most 22 words with this shape: the business problem the project solves, what the candidate built, and the benefit or result, taken from that card's Problem, Solution, Business benefit, Cost and Results lines. Choose projects whose business problem resembles the employer's need and write in business terms (time saved, cost avoided, risk reduced, data kept private), naming at most two technologies. Use a benefit only if the card states it; never invent savings or figures.
 - NEVER claim a skill listed in missing_skills anywhere except acknowledged_gap: do not use its name, hint at it or imply familiarity. Claim a matched skill only where the evidence quote supports it.
@@ -250,10 +250,11 @@ def find_violations(
         problems.append("every bullet needs a label and a text")
     if out.opening.strip() and out.closing.strip() and out.bullets:
         total = word_count(EmailDraft(subject="", greeting=greeting, body=out, other_projects=other_projects or []).text())
+        target = (MIN_WORDS + MAX_WORDS) // 2
         if total > MAX_WORDS:
-            problems.append(f"the finished email is {total} words; cut about {total - 165} words (limit {MAX_WORDS})")
+            problems.append(f"the finished email is {total} words; cut about {total - target} words (limit {MAX_WORDS})")
         elif total < MIN_WORDS:
-            problems.append(f"the finished email is {total} words; add about {165 - total} words (minimum {MIN_WORDS})")
+            problems.append(f"the finished email is {total} words; add about {target - total} words (minimum {MIN_WORDS})")
     if "**" in everything:
         problems.append("no markdown")
 

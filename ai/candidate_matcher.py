@@ -79,6 +79,7 @@ class CandidateContext:
     project_names: dict[int, str]
     ranking_text: str = ""  # the "## Ranking" block of project_cards.md; kept out of cards_text so it is never evidence
     rank: list[int] = field(default_factory=list)  # card numbers, best first
+    resume_path: Path | None = None  # the file that was read, so the sender attaches the same one
 
     @property
     def searchable(self) -> str:
@@ -111,7 +112,7 @@ class MatchResult(BaseModel):
         return [{"skill": x} if isinstance(x, str) else x for x in v] if isinstance(v, list) else v
 
 
-def _read_resume(context_dir: Path) -> str:
+def _read_resume(context_dir: Path) -> tuple[str, Path]:
     pdfs = sorted(context_dir.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)  # newest first
     if len(pdfs) > 1:
         log.warning(
@@ -128,15 +129,17 @@ def _read_resume(context_dir: Path) -> str:
         text = "\n".join((page.extract_text() or "") for page in reader.pages)
         modified = time.strftime("%Y-%m-%d %H:%M", time.localtime(pdfs[0].stat().st_mtime))
         log.info("resume: %s (modified %s, %d pages, %d chars)", pdfs[0].name, modified, len(reader.pages), len(text))
+        path = pdfs[0]
     else:
         texts = sorted([*context_dir.glob("resume*.txt"), *context_dir.glob("resume*.md")])
         if not texts:
             raise FileNotFoundError(f"no resume PDF (or resume*.txt/.md) found in {context_dir}")
         text = texts[0].read_text(encoding="utf-8")
         log.info("resume: %s (%d chars)", texts[0].name, len(text))
+        path = texts[0]
     # Contact details are not needed for matching; keep them out of the prompt.
     lines = [ln.rstrip() for ln in text.splitlines() if ln.strip() and not CONTACT_RE.search(ln)]
-    return "\n".join(lines)
+    return "\n".join(lines), path
 
 
 def load_candidate_context(context_dir: str | Path = "context") -> CandidateContext:
@@ -154,12 +157,14 @@ def load_candidate_context(context_dir: str | Path = "context") -> CandidateCont
         raise ValueError(f"no '## 1. Project name' headings found in {cards_path}")
     rank = _parse_rank(ranking, names)
     log.info("project cards: %d projects, %d chars; rank order: %s", len(names), len(cards), rank)
+    resume_text, resume_path = _read_resume(d)
     return CandidateContext(
-        resume_text=_read_resume(d),
+        resume_text=resume_text,
         cards_text=cards,
         project_names=names,
         ranking_text=ranking,
         rank=rank,
+        resume_path=resume_path,
     )
 
 

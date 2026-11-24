@@ -8,7 +8,7 @@ Paste one or many posts. Put a line containing only --- between posts.
 Finish the paste with a line containing only END (or press Ctrl-D).
 Type quit on its own line to exit.
 
-Right now this is a dry run: nothing is sent anywhere.
+Right now this is a dry run unless you pass --send.
 """
 
 import argparse
@@ -30,8 +30,10 @@ from ai.candidate_matcher import (
     load_candidate_context,
     match_candidate,
 )
+from ai.email_sender import SendError, send_all
 from ai.email_writer import EmailDraft, WriterError, load_style_examples, write_email
 from ai.job_analyzer import AnalyzerError, JobAnalysis, analyze_job
+from database.connection import already_sent, connect, record
 
 console = Console()
 log = logging.getLogger("jobbot.cli")
@@ -112,7 +114,7 @@ def show_email(d: EmailDraft, to: str | None, as_json: bool) -> None:
     head = f"[bold]To:[/] {to or '-'}\n[bold]Subject:[/] {d.subject}\n\n"
     from rich.markup import escape  # so [brackets] inside the email are not read as styling
 
-    console.print(Panel(head + escape(d.text()), title=f"email draft: {d.word_count()} words (dry run, nothing is sent)", border_style="magenta"))
+    console.print(Panel(head + escape(d.text()), title=f"email draft: {d.word_count()} words", border_style="magenta"))
     if as_json:
         console.print_json(d.model_dump_json())
 
@@ -123,6 +125,8 @@ def run_batch(
     as_json: bool,
     ctx: CandidateContext | None = None,
     style: str | None = None,
+    send: bool = False,
+    con=None,
 ) -> None:
     posts = split_posts(raw)
     if not posts:
@@ -130,6 +134,7 @@ def run_batch(
         return
     log.info("received %d post(s)", len(posts))
     rows = []
+    pending: list[tuple[EmailDraft, str, JobAnalysis, str]] = []  # sent at the end so the gaps pace the batch
     for i, text in enumerate(posts, 1):
         h = post_hash(text)
         first_line = text.splitlines()[0][:60]
@@ -139,6 +144,10 @@ def run_batch(
             rows.append((i, first_line, "duplicate", "-", "-"))
             continue
         seen.add(h)
+        if con is not None and already_sent(con, post_hash=h):
+            log.warning("post %d was already applied to; skipping", i)
+            rows.append((i, first_line, "already applied", "-", "-", "-", "-"))
+            continue
         started = time.perf_counter()
         try:
             a = analyze_job(text)
@@ -152,6 +161,10 @@ def run_batch(
             continue
         log.info("post %d done in %.1fs", i, time.perf_counter() - started)
         show_result(a, as_json)
+        if con is not None and a.apply_email and already_sent(con, to_email=a.apply_email):
+            log.warning("%s was already emailed; skipping", a.apply_email)
+            rows.append((i, f"{a.role_title or '?'} / {a.company or '?'}", "already emailed", a.apply_method, a.apply_email, "-", "-"))
+            continue
         projects, drafted = "-", "-"
         if ctx is not None:
             try:
@@ -163,6 +176,8 @@ def run_batch(
                         draft = write_email(a, m, ctx, style)
                         show_email(draft, a.apply_email, as_json)
                         drafted = "[green]drafted[/]"
+                        if send and a.can_auto_apply and a.apply_email:
+                            pending.append((draft, a.apply_email, a, text))
                     except WriterError as e:
                         log.error("writing FAILED: %s", e)
                         drafted = "[red]failed[/]"
@@ -192,6 +207,32 @@ def run_batch(
         table.add_row(*[str(x) for x in r])
     console.print(table)
 
+    if pending:
+        if con is None or ctx is None or ctx.resume_path is None:
+            log.error("cannot send: no database or no CV file")
+            return
+        log.info("sending %d email(s), 60-180s apart", len(pending))
+        pairs = [(draft, to) for draft, to, _, _ in pending]
+        sent = 0
+        try:
+            for (draft, to, job_row, post_text), message_id in zip(pending, send_all(pairs, ctx.resume_path)):
+                record(
+                    con,
+                    post_text=post_text,
+                    post_hash=post_hash(post_text),
+                    to_email=to,
+                    company=job_row.company,
+                    role_title=job_row.role_title,
+                    subject=draft.subject,
+                )
+                sent += 1
+                log.info("recorded %s (gmail id %s)", to, message_id)
+            console.print(f"[green]sent and recorded {sent} email(s)[/]")
+        except SendError as e:
+            log.error("sending FAILED after %d send(s): %s", sent, e)
+        except Exception as e:  # network, quota, expired token...
+            log.error("sending FAILED after %d send(s): %s: %s", sent, type(e).__name__, e)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -201,6 +242,7 @@ def main() -> None:
     parser.add_argument("--context", default="context", help="folder with the resume PDF and project_cards.md")
     parser.add_argument("--no-match", action="store_true", help="skip the candidate matcher (and the writer)")
     parser.add_argument("--no-write", action="store_true", help="skip the email writer")
+    parser.add_argument("--send", action="store_true", help="actually send the drafts through Gmail (60-180s apart)")
     args = parser.parse_args()
 
     load_dotenv()
@@ -234,17 +276,23 @@ def main() -> None:
         except FileNotFoundError as e:
             log.error("writer disabled: %s", e)
 
+    if args.send and (ctx is None or style is None):
+        console.print("[red]--send needs the matcher and the writer: fix the context folder first[/]")
+        sys.exit(1)
+
+    con = connect()
+    log.info("db: %s", con.execute("PRAGMA database_list").fetchone()[2])
     seen: set[str] = set()
     if args.file:
         with open(args.file, encoding="utf-8") as f:
-            run_batch(f.read(), seen, args.json, ctx, style)
+            run_batch(f.read(), seen, args.json, ctx, style, args.send, con)
         return
     while True:
         raw = read_paste()
         if raw is None:
             console.print("bye")
             return
-        run_batch(raw, seen, args.json, ctx, style)
+        run_batch(raw, seen, args.json, ctx, style, args.send, con)
 
 
 if __name__ == "__main__":

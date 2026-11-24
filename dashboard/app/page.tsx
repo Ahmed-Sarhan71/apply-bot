@@ -1,0 +1,111 @@
+import { connection } from "next/server";
+import Link from "next/link";
+import { updateApplication } from "./actions";
+import { listApplications, STATUSES, type Application, type Status } from "@/lib/db";
+
+const BADGE: Record<Status, string> = {
+  sent: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
+  replied: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200",
+  rejected: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
+  no_reply: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
+};
+
+function formatDate(iso: string) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function Card({ app }: { app: Application }) {
+  return (
+    <article className="rounded-xl border border-black/10 p-5 dark:border-white/15">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold">{app.role_title ?? "Unknown role"}</h2>
+          <p className="text-sm opacity-70">
+            {app.company ?? "-"} · {app.to_email}
+          </p>
+        </div>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE[app.status]}`}>
+          {app.status.replace("_", " ")}
+        </span>
+      </div>
+
+      <p className="mt-2 text-sm opacity-70">
+        Applied {formatDate(app.applied_at)} · {app.subject}
+      </p>
+
+      <details className="mt-3">
+        <summary className="cursor-pointer text-sm underline">Show job post</summary>
+        <pre className="mt-2 whitespace-pre-wrap font-sans text-sm opacity-80">{app.post_text}</pre>
+      </details>
+
+      <form action={updateApplication} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start">
+        <input type="hidden" name="id" value={app.id} />
+        <select
+          name="status"
+          defaultValue={app.status}
+          className="rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
+        >
+          {STATUSES.map((s) => (
+            <option key={s} value={s} className="text-black">
+              {s.replace("_", " ")}
+            </option>
+          ))}
+        </select>
+        <textarea
+          name="note"
+          rows={2}
+          defaultValue={app.note ?? ""}
+          placeholder="Note (recruiter name, follow-up date...)"
+          className="flex-1 rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20"
+        />
+        <button
+          type="submit"
+          className="rounded-md bg-black px-3 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-black"
+        >
+          Save
+        </button>
+      </form>
+    </article>
+  );
+}
+
+export default async function Page() {
+  await connection(); // the page reads the db on every request, never at build time
+  const apps = listApplications();
+  const replied = apps.filter((a) => a.status === "replied").length;
+  const rejected = apps.filter((a) => a.status === "rejected").length;
+
+  return (
+    <main className="mx-auto w-full max-w-4xl px-6 py-10">
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Job applications</h1>
+          <p className="mt-1 text-sm opacity-70">
+            {apps.length} total · {replied} replied · {rejected} rejected
+          </p>
+        </div>
+        <Link href="/table" className="text-sm underline">
+          Table view
+        </Link>
+      </header>
+
+      {apps.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-black/20 p-10 text-center dark:border-white/20">
+          <p className="font-medium">No applications yet.</p>
+          <p className="mt-1 text-sm opacity-70">
+            Run <code className="font-mono">uv run python cli.py --send</code> and the first one shows up here.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {apps.map((app) => (
+            <Card key={app.id} app={app} />
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}

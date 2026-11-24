@@ -44,14 +44,14 @@ CTX = CandidateContext(
 STYLE = "1- job post ... 1- email Dear Team, ..."
 
 GOOD = {
-    "opening": "I'm applying for the AI Engineer position at Acme. I hold a Bachelor's degree in Computer Engineering and build AI systems that give teams reliable answers from their own documents.",
+    "opening": "I'm applying for the AI Engineer position at Acme. I hold a Bachelor's degree in Computer Engineering, and I build AI systems that give teams reliable answers from their own documents while keeping that data private and cutting recurring cloud costs.",
     "bullets": [
-        {"label": "AI Research Assistant", "text": "Built an offline document question-answering app with FastAPI and Qdrant, so teams get answers from confidential PDFs without sending data to any cloud service."},
-        {"label": "DFU Ensemble Classifier", "text": "Built an ensemble of 5 ResNet18 models reaching an infection F1 of 0.855, giving clinicians consistent first-pass wound triage."},
-        {"label": "Workflow automation", "text": "Developed automation workflows around AI agents that remove repetitive manual decisions from daily operations."},
+        {"label": "AI Research Assistant", "text": "Built an offline document question-answering app with FastAPI and Qdrant, so teams get answers from confidential PDFs without sending data to any cloud service and without per-query fees."},
+        {"label": "DFU Ensemble Classifier", "text": "Built an ensemble of 5 ResNet18 models reaching an infection F1 of 0.855, giving clinicians a consistent first pass over wound images before specialist review."},
+        {"label": "Workflow automation", "text": "Developed automation workflows around AI agents that remove repetitive manual decisions from daily operations and free the team for higher-value work."},
     ],
     "acknowledged_gap": "Although I haven't worked with Kubernetes in a professional environment, I'm eager to learn it.",
-    "closing": "I would bring the same business focus to Acme's AI projects.",
+    "closing": "I would bring the same business focus and care with data to Acme's AI projects.",
     "why_hire": None,
 }
 
@@ -132,7 +132,7 @@ def test_render_text_and_html():
     t = d.text()
     assert t.startswith("Dear Acme Hiring Team,\n\nI'm applying for the AI Engineer position at Acme.")
     assert "- AI Research Assistant: Built an offline" in t
-    assert "business focus to Acme's AI projects. Although I haven't worked with Kubernetes" in t
+    assert "business focus and care with data to Acme's AI projects. Although I haven't worked with Kubernetes" in t
     assert f"Portfolio: {PORTFOLIO_URL}" in t and f"LinkedIn: {LINKEDIN_URL}" in t
     assert "GitHub: https://github.com/Ahmed-Sarhan71" in t
     assert t.endswith("Best regards,\nAhmed Sarhan") and CV_LINE in t
@@ -244,7 +244,7 @@ def test_word_count_ignores_bullet_dashes_and_blank_tokens():
 
 def test_finished_email_is_between_150_and_180_words():
     d = write_email(job(), match(), CTX, STYLE, client=FakeClient(GOOD))
-    assert 150 <= d.word_count() <= 180
+    assert 190 <= d.word_count() <= 220
 
 
 def test_too_long_and_too_short_are_rejected_with_the_count():
@@ -265,7 +265,7 @@ def test_four_bullets_are_rejected_and_repaired():
 def test_length_problem_triggers_a_rewrite():
     c = FakeClient(variant(closing="word " * 80), GOOD)
     d = write_email(job(), match(), CTX, STYLE, client=c)
-    assert 150 <= d.word_count() <= 180 and len(c.calls) == 2
+    assert 190 <= d.word_count() <= 220 and len(c.calls) == 2
 
 
 def test_business_need_reaches_the_model_and_the_prompt_asks_for_business_terms():
@@ -273,7 +273,7 @@ def test_business_need_reaches_the_model_and_the_prompt_asks_for_business_terms(
     write_email(job(business_need="Acme needs faster answers from its documents."), match(), CTX, STYLE, client=c)
     assert "Acme needs faster answers from its documents." in c.calls[0]["messages"][1]["content"]
     system = c.calls[0]["messages"][0]["content"]
-    assert "business problem" in system and "NEVER more than 3" in system and "150 to 180" in system
+    assert "business problem" in system and "NEVER more than 3" in system and "190 to 220" in system
 
 
 # ---------- the rest of the projects, GitHub link ----------
@@ -318,14 +318,14 @@ def test_email_lists_remaining_projects_and_github_in_text_and_html():
         selected_projects=[ProjectPick(project_id=1, name="x"), ProjectPick(project_id=2, name="y")],
         missing_skills=["Kubernetes"],
     )
-    reply = variant(bullets=[GOOD["bullets"][0], GOOD["bullets"][1]])  # AI Research Assistant, DFU
+    reply = variant()  # all three bullets
     d = write_email(job(), m, FOUR, STYLE, client=FakeClient(reply))
     assert d.other_projects == ["Nextcloud Home Server", "Tennis Fusion"]
     t = d.text()
     assert "Beyond these, I've also built Nextcloud Home Server and Tennis Fusion. All of them are on my GitHub and in my portfolio." in t
     assert t.index("Beyond these") > t.index("- DFU Ensemble Classifier:") and t.index("Beyond these") < t.index("Portfolio:")
     assert f'href="{GITHUB_URL}"' in d.html() and "Nextcloud Home Server" in d.html()
-    assert 150 <= d.word_count() <= 180
+    assert 190 <= d.word_count() <= 220
 
 
 def test_prompt_tells_the_model_not_to_list_other_projects():
