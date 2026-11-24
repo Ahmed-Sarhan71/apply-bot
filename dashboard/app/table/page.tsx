@@ -47,7 +47,7 @@ export default async function TablePage() {
                 key={r.id}
                 className={`${ROW} border-b border-black/10 py-2.5 text-[15px] last:border-0 dark:border-white/10`}
               >
-                <Link href={`/#${r.id}`} className="font-medium underline underline-offset-2" title="Open card">
+                <Link href={`/card/${r.id}`} className="font-medium underline underline-offset-2" title="Open card">
                   {r.id}
                 </Link>
                 <span className="tabular-nums">{dmY(r.applied_at)}</span>

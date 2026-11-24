@@ -25,6 +25,16 @@ export function getDb() {
   return new Database(DB_PATH, { fileMustExist: true });
 }
 
+export function getApplication(id: number): Application | null {
+  if (!existsSync(/*turbopackIgnore: true*/ DB_PATH)) return null;
+  const db = getDb();
+  try {
+    return (db.prepare("SELECT * FROM applications WHERE id = ?").get(id) as Application) ?? null;
+  } finally {
+    db.close();
+  }
+}
+
 export function listApplications(): Application[] {
   if (!existsSync(/*turbopackIgnore: true*/ DB_PATH)) return [];
   const db = getDb();

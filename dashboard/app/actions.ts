@@ -30,4 +30,5 @@ export async function updateApplication(formData: FormData) {
   }
   revalidatePath("/");
   revalidatePath("/table");
+  revalidatePath(`/card/${id}`);
 }
