@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from ai.candidate_matcher import (
+    INSTRUCTIONS,
     MatcherError,
     build_system_prompt,
     load_candidate_context,
@@ -159,12 +160,12 @@ def test_gives_up_after_max_attempts(ctx):
 
 def test_system_prompt_is_identical_across_jobs_for_caching(ctx):
     c = FakeClient({}, {})
-    match_candidate(job(role_title="First"), ctx, client=c, today=TODAY)
-    match_candidate(job(role_title="Second", company="Other"), ctx, client=c, today=TODAY)
+    match_candidate(job(role_title="Zq1Probe"), ctx, client=c, today=TODAY)
+    match_candidate(job(role_title="Zq2Probe", company="Other"), ctx, client=c, today=TODAY)
     s1, s2 = (call["messages"][0]["content"] for call in c.calls)
     assert s1 == s2 == build_system_prompt(ctx)
-    assert "First" not in s1 and "Second" not in s1  # job text must not leak into the cached prefix
-    assert "Second" in c.calls[1]["messages"][1]["content"]
+    assert "Zq1Probe" not in s1 and "Zq2Probe" not in s1  # job text must not leak into the cached prefix
+    assert "Zq2Probe" in c.calls[1]["messages"][1]["content"]
 
 
 def test_thinking_is_disabled(ctx):
@@ -194,3 +195,62 @@ def test_live_ai_job_picks_rag_project_and_flags_kubernetes():
     assert "Kubernetes" in r.missing_skills and "Terraform" in r.missing_skills
     assert "Python" in [m.skill for m in r.matched_skills]
     assert r.experience_note  # 5+ years asked, the resume shows far less
+
+
+def test_newest_pdf_is_used_when_several_exist(tmp_path, caplog):
+    from pypdf import PdfWriter
+
+    (tmp_path / "project_cards.md").write_text(CARDS, encoding="utf-8")
+    for name, mtime in (("Resume.pdf", 1_000_000_000), ("Resume_v2.pdf", 1_700_000_000)):
+        w = PdfWriter()
+        w.add_blank_page(width=72, height=72)
+        with open(tmp_path / name, "wb") as f:
+            w.write(f)
+        os.utime(tmp_path / name, (mtime, mtime))  # Resume.pdf sorts first alphabetically but is the older file
+    with caplog.at_level("INFO", logger="jobbot.matcher"):
+        load_candidate_context(tmp_path)
+    assert "resume: Resume_v2.pdf" in caplog.text
+    assert "using the most recently modified: Resume_v2.pdf" in caplog.text
+
+
+# ---------- ranking block ----------
+
+RANKED_CARDS = CARDS + """
+---
+
+## Ranking
+Choose the projects in this order, best first:
+1. Tennis Fusion
+Promotions: jobs about .NET, C# or ASP.NET Core put Tennis Fusion first.
+Rank order (card numbers, best first): 3, 1, 99
+"""
+
+
+def _ranked_ctx(tmp_path, cards=RANKED_CARDS):
+    (tmp_path / "project_cards.md").write_text(cards, encoding="utf-8")
+    (tmp_path / "resume.txt").write_text(RESUME, encoding="utf-8")
+    return load_candidate_context(tmp_path)
+
+
+def test_ranking_block_is_parsed_and_unknown_numbers_ignored(tmp_path):
+    c = _ranked_ctx(tmp_path)
+    assert c.rank == [3, 1, 2]  # 99 does not exist; card 2 was not listed so it is appended
+    assert sorted(c.project_names) == [1, 2, 3]  # "## Ranking" is not mistaken for a card
+
+
+def test_ranking_text_is_not_evidence_but_is_in_the_prompt(tmp_path):
+    c = _ranked_ctx(tmp_path)
+    assert "asp.net core" not in c.searchable and "Promotions" not in c.cards_text
+    assert "=== PROJECT RANKING ===" in build_system_prompt(c) and "put Tennis Fusion first" in build_system_prompt(c)
+    r = match_candidate(job(), c, client=FakeClient({"matched_skills": [{"skill": "ASP.NET Core", "evidence": "ASP.NET Core"}]}), today=TODAY)
+    assert [m.skill for m in r.matched_skills] == [] and r.missing_skills == ["ASP.NET Core"]
+
+
+def test_cards_without_a_ranking_block_still_work(tmp_path):
+    c = _ranked_ctx(tmp_path, cards=CARDS)
+    assert c.rank == [1, 2, 3] and c.ranking_text == ""
+    assert "=== PROJECT RANKING ===" not in build_system_prompt(c)
+
+
+def test_prompt_tells_the_model_to_follow_the_ranking():
+    assert "PROJECT RANKING" in INSTRUCTIONS and "promotions" in INSTRUCTIONS

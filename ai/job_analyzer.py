@@ -32,12 +32,14 @@ Return ONLY a JSON object with exactly these keys:
   "min_years_experience": integer or null,
   "required_skills": [string],
   "nice_to_have_skills": [string],
+  "responsibilities": [string],
   "location": string or null,
   "work_mode": "remote" | "hybrid" | "onsite" | "unspecified",
   "post_language": "en" | "ar" | "mixed",
   "multiple_roles": boolean,
   "special_requirements": [string],
-  "summary": string
+  "summary": string,
+  "business_need": string or null
 }
 
 Rules:
@@ -48,8 +50,10 @@ Rules:
 - multiple_roles: true when the post advertises more than one distinct job.
 - role_title: for multiple roles, use the first role listed.
 - required_skills: concrete technologies or skills the post requires, short items, no sentences. nice_to_have_skills: those marked preferred or a plus.
+- responsibilities: what the employer needs this person to do or achieve for the business, as at most 4 short phrases copied or tightly paraphrased from the post (for example "build data pipelines for document and image processing"). Empty list if the post does not say.
 - special_requirements: hard conditions that are not skills (notice period, language, location, certifications, degree), one short string each.
 - summary: one plain English sentence describing the job.
+- business_need: what the employer is trying to achieve with this hire, in business terms (the problem the role exists to solve, such as turning raw data into reliable reports or cutting manual work). One short sentence in your own words, based only on the post's description of the work and its goals; null if the post gives no clue.
 - Output JSON only, no commentary.
 
 EXAMPLE JSON OUTPUT:
@@ -63,12 +67,14 @@ EXAMPLE JSON OUTPUT:
   "min_years_experience": 3,
   "required_skills": ["Python", "FastAPI", "PostgreSQL"],
   "nice_to_have_skills": ["Docker"],
+  "responsibilities": ["build and maintain Python APIs", "keep services reliable in production"],
   "location": "Cairo, Egypt",
   "work_mode": "hybrid",
   "post_language": "en",
   "multiple_roles": false,
   "special_requirements": ["Notice period under 30 days"],
-  "summary": "Acme is hiring a mid-level backend engineer to build Python APIs."
+  "summary": "Acme is hiring a mid-level backend engineer to build Python APIs.",
+  "business_need": "Acme needs reliable APIs so its customer-facing apps can scale without outages."
 }"""
 
 
@@ -82,12 +88,14 @@ class JobAnalysis(BaseModel):
     min_years_experience: int | None = None
     required_skills: list[str] = Field(default_factory=list)
     nice_to_have_skills: list[str] = Field(default_factory=list)
+    responsibilities: list[str] = Field(default_factory=list)
     location: str | None = None
     work_mode: Literal["remote", "hybrid", "onsite", "unspecified"] = "unspecified"
     post_language: Literal["en", "ar", "mixed"] = "en"
     multiple_roles: bool = False
     special_requirements: list[str] = Field(default_factory=list)
     summary: str = ""
+    business_need: str | None = None
 
     @property
     def can_auto_apply(self) -> bool:
@@ -156,7 +164,6 @@ def analyze_job(post_text: str, client=None, model: str | None = None, max_attem
             response_format={"type": "json_object"},
             max_tokens=1500,
             temperature=0,
-            extra_body={"thinking": {"type": "disabled"}},
         )
         elapsed = time.perf_counter() - started
         usage = getattr(resp, "usage", None)

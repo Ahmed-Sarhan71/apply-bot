@@ -64,3 +64,28 @@ Each card ends with "Do not claim", the limits the email writer must respect.
 **Business benefit:** Scouts and suppresses before crews arrive, keeping people out of danger and saving critical minutes. Remote dashboard monitoring shows temperature, humidity, flame and water level.
 **Cost:** The whole prototype cost RM 361 (Malaysian ringgit) in parts, using used components where possible. The ESP32 redesign targets lower power and a lower price.
 **Do not claim:** A deployed or field-tested product. It is a capstone prototype from MMU University with about 1.7 hours of runtime at full load.
+
+---
+
+## 8. WhatsApp AI Customer Support Agents (course-enquiry automation)
+**Tech:** Python, FastAPI, DeepSeek (LLM agents), WhatsApp Cloud API, PostgreSQL, Google Sheets, Pushover, Railway
+**Problem:** Educational centers answer the same course enquiries on WhatsApp by hand, which ties up staff and risks losing leads that never get written down.
+**Solution:** I built and orchestrated AI customer-support agents that answer course enquiries and handle customer conversations over the WhatsApp Cloud API. PostgreSQL stores the conversation history and chat memory, so the agent keeps context between messages. Leads are collected in Google Sheets, and conversations that need a person are escalated to staff through Pushover. The app is deployed on Railway.
+**Business benefit:** First-line enquiries are handled automatically, so staff only step in when a human is really needed. Every lead lands in a simple Google Sheet, and customers don't have to repeat themselves because the agent remembers the conversation.
+**Cost:** No cost figure is stated. It runs on a hosted app (Railway), an LLM API (DeepSeek) and the WhatsApp Cloud API.
+**Skills shown:** AI agent orchestration, LLM integration, WhatsApp webhook handling, database design for chat memory, third-party integrations (Google Sheets, Pushover), human-in-the-loop escalation, cloud deployment.
+**Do not claim:** Customer counts, message volumes, conversion or revenue gains, or response-time figures. None are stated.
+
+---
+
+## Ranking
+Choose the projects to feature in this order of priority, best first:
+1. AI Research Assistant
+2. WhatsApp AI Customer Support Agents
+3. DFU Ensemble Classifier
+4. Edge-AI Pest Monitoring Station
+5. Then the others: Candy Calorie Counter, Pyro Protector, Nextcloud Home Server
+Promotions (move to the front when the job's core is about it):
+- Tennis Fusion (e-commerce platform): jobs about .NET, C#, ASP.NET Core, Angular or full-stack web development.
+- Nextcloud Home Server: jobs about Linux administration, servers or networking.
+Rank order (card numbers, best first): 1, 8, 3, 6, 2, 7, 4, 5

@@ -13,7 +13,7 @@ import logging
 import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -25,6 +25,8 @@ log = logging.getLogger("jobbot.matcher")
 
 MAX_PROJECTS = 3
 CARD_HEADING_RE = re.compile(r"^## (\d+)\.\s+(.+?)\s*$", re.MULTILINE)
+RANKING_HEADING_RE = re.compile(r"^## Ranking\b.*$", re.MULTILINE)
+RANK_LINE_RE = re.compile(r"^Rank order[^:\n]*:\s*([\d,\s]+)$", re.MULTILINE)
 CONTACT_RE = re.compile(r"@|\+\d{6,}|^\s*\+?[\d\s()-]{9,}\s*$|linkedin\.com", re.IGNORECASE)
 
 INSTRUCTIONS = """You are the Candidate Matcher in a job-application assistant. You receive a candidate's resume, a set of numbered project cards, and then one job. Decide which of the candidate's projects best support an application to that job, and which required skills the candidate honestly lacks.
@@ -44,7 +46,7 @@ Rules:
 - A skill counts as matched only if the resume or a card explicitly shows it. Do not infer one skill from a related one (Docker is not Kubernetes, SQL Server is not AWS, a RAG app is not Azure AI Foundry).
 - For every matched skill, "evidence" must be an exact quote, copied word for word (at most 12 words), from the resume or a project card. The quote must show the skill itself or a tool that directly implements it (for example "Matplotlib, Seaborn" is evidence for Data Visualization). If you cannot quote such evidence, the skill is missing, not matched.
 - matched_skills and missing_skills together should cover the job's required skills. Keep each skill a short name copied from the job's skill list. Put nice-to-have skills in matched_skills only if the candidate has them; do not list unmatched nice-to-haves as missing.
-- selected_projects: choose 2 or 3 project_id values (the number in each card heading), best first. Pick projects that demonstrate the job's required skills or domain. Each reason is one short sentence naming the concrete overlap. If no project fits well, still choose the 2 closest and say honestly what overlaps.
+- selected_projects: choose 2 or 3 project_id values (the number in each card heading), best first, following the PROJECT RANKING section that comes after the cards. First apply its promotions (for example a .NET or similar job puts Tennis Fusion first), then fill the remaining places from the top of the ranking, skipping a ranked project only when it has no connection at all to the job's work or requirements. Each reason is one short sentence naming the concrete overlap (a shared business problem or technology). If nothing connects well, still choose the 2 highest-ranked projects and say honestly what overlaps.
 - experience_note: if the job asks for more years of experience or a higher seniority than the resume supports, write one honest, neutral sentence about the gap, using the dates in the resume and today's date from the job message. Otherwise null.
 - email_angle: one sentence on what the application email should lead with, using only true facts from the resume and cards. Never suggest mentioning, admitting or apologising for a missing skill or a lack of experience: the email simply does not claim what the candidate lacks. Neither the angle nor any reason may claim a skill you list under missing_skills.
 - Output JSON only, no commentary.
@@ -75,6 +77,8 @@ class CandidateContext:
     resume_text: str
     cards_text: str
     project_names: dict[int, str]
+    ranking_text: str = ""  # the "## Ranking" block of project_cards.md; kept out of cards_text so it is never evidence
+    rank: list[int] = field(default_factory=list)  # card numbers, best first
 
     @property
     def searchable(self) -> str:
@@ -108,13 +112,22 @@ class MatchResult(BaseModel):
 
 
 def _read_resume(context_dir: Path) -> str:
-    pdfs = sorted(context_dir.glob("*.pdf"))
+    pdfs = sorted(context_dir.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)  # newest first
+    if len(pdfs) > 1:
+        log.warning(
+            "%d PDFs in %s; using the most recently modified: %s (ignoring: %s)",
+            len(pdfs),
+            context_dir,
+            pdfs[0].name,
+            ", ".join(p.name for p in pdfs[1:]),
+        )
     if pdfs:
         from pypdf import PdfReader
 
         reader = PdfReader(str(pdfs[0]))
         text = "\n".join((page.extract_text() or "") for page in reader.pages)
-        log.info("resume: %s (%d pages, %d chars)", pdfs[0].name, len(reader.pages), len(text))
+        modified = time.strftime("%Y-%m-%d %H:%M", time.localtime(pdfs[0].stat().st_mtime))
+        log.info("resume: %s (modified %s, %d pages, %d chars)", pdfs[0].name, modified, len(reader.pages), len(text))
     else:
         texts = sorted([*context_dir.glob("resume*.txt"), *context_dir.glob("resume*.md")])
         if not texts:
@@ -131,17 +144,40 @@ def load_candidate_context(context_dir: str | Path = "context") -> CandidateCont
     cards_path = d / "project_cards.md"
     if not cards_path.exists():
         raise FileNotFoundError(f"{cards_path} not found")
-    cards = cards_path.read_text(encoding="utf-8")
+    raw = cards_path.read_text(encoding="utf-8")
+    m = RANKING_HEADING_RE.search(raw)
+    cards, ranking = (raw[: m.start()].rstrip(), raw[m.start() :].strip()) if m else (raw, "")
+    if cards.endswith("---"):
+        cards = cards[:-3].rstrip()
     names = {int(n): title for n, title in CARD_HEADING_RE.findall(cards)}
     if not names:
         raise ValueError(f"no '## 1. Project name' headings found in {cards_path}")
-    log.info("project cards: %d projects, %d chars", len(names), len(cards))
-    return CandidateContext(resume_text=_read_resume(d), cards_text=cards, project_names=names)
+    rank = _parse_rank(ranking, names)
+    log.info("project cards: %d projects, %d chars; rank order: %s", len(names), len(cards), rank)
+    return CandidateContext(
+        resume_text=_read_resume(d),
+        cards_text=cards,
+        project_names=names,
+        ranking_text=ranking,
+        rank=rank,
+    )
+
+
+def _parse_rank(ranking_text: str, names: dict[int, str]) -> list[int]:
+    """'Rank order (card numbers, best first): 1, 8, 3' -> [1, 8, 3, <any cards not listed, in number order>]."""
+    m = RANK_LINE_RE.search(ranking_text)
+    listed = [int(x) for x in re.findall(r"\d+", m.group(1))] if m else []
+    unknown = [i for i in listed if i not in names]
+    if unknown:
+        log.warning("rank order lists card numbers that do not exist: %s", unknown)
+    rank = list(dict.fromkeys(i for i in listed if i in names))
+    return rank + [i for i in sorted(names) if i not in rank]
 
 
 def build_system_prompt(ctx: CandidateContext) -> str:
     """Must be byte-identical for every job so the provider's prefix cache can hit."""
-    return f"{INSTRUCTIONS}\n\n=== CANDIDATE RESUME ===\n{ctx.resume_text}\n\n=== PROJECT CARDS ===\n{ctx.cards_text}"
+    ranking = f"\n\n=== PROJECT RANKING ===\n{ctx.ranking_text}" if ctx.ranking_text else ""
+    return f"{INSTRUCTIONS}\n\n=== CANDIDATE RESUME ===\n{ctx.resume_text}\n\n=== PROJECT CARDS ===\n{ctx.cards_text}{ranking}"
 
 
 def build_job_message(job: JobAnalysis, today: date) -> str:
