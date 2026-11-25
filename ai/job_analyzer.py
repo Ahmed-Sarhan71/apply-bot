@@ -162,7 +162,7 @@ def analyze_job(post_text: str, client=None, model: str | None = None, max_attem
             model=model,
             messages=messages,
             response_format={"type": "json_object"},
-            max_tokens=1500,
+            max_tokens=3000,
             temperature=0,
         )
         elapsed = time.perf_counter() - started

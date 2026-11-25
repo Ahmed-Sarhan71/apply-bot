@@ -1,4 +1,17 @@
-from database.connection import already_sent, connect, record
+from database.connection import already_sent, connect, record, record_failure
+
+
+def test_a_failed_post_is_kept_and_cleared_once_it_sends(tmp_path):
+    con = connect(tmp_path / "t.db")
+    record_failure(con, post_text="post", post_hash="h1", reason="writing: one word short")
+    record_failure(con, post_text="post", post_hash="h1", reason="writing: mentioned monitoring")
+    rows = con.execute("SELECT reason FROM failures").fetchall()
+    assert len(rows) == 1, "same post must not pile up rows"
+    assert "monitoring" in rows[0][0], "latest reason wins"
+
+    record(con, post_text="post", post_hash="h1", to_email="hr@acme.com")
+    assert con.execute("SELECT COUNT(*) FROM failures").fetchone()[0] == 0
+    assert already_sent(con, post_hash="h1")
 
 
 def test_record_then_already_sent(tmp_path):

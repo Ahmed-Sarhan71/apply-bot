@@ -25,6 +25,17 @@ export function getDb() {
   return new Database(DB_PATH, { fileMustExist: true });
 }
 
+export type Failure = {
+  id: number;
+  failed_at: string;
+  post_hash: string;
+  post_text: string;
+  company: string | null;
+  role_title: string | null;
+  to_email: string | null;
+  reason: string;
+};
+
 export function getApplication(id: number): Application | null {
   if (!existsSync(/*turbopackIgnore: true*/ DB_PATH)) return null;
   const db = getDb();
@@ -42,6 +53,16 @@ export function listApplications(): Application[] {
     return db
       .prepare("SELECT * FROM applications ORDER BY applied_at DESC, id DESC")
       .all() as Application[];
+  } finally {
+    db.close();
+  }
+}
+
+export function listFailures(): Failure[] {
+  if (!existsSync(/*turbopackIgnore: true*/ DB_PATH)) return [];
+  const db = getDb();
+  try {
+    return db.prepare("SELECT * FROM failures ORDER BY failed_at DESC, id DESC").all() as Failure[];
   } finally {
     db.close();
   }

@@ -33,7 +33,7 @@ from ai.candidate_matcher import (
 from ai.email_sender import SendError, send_all
 from ai.email_writer import EmailDraft, WriterError, load_style_examples, write_email
 from ai.job_analyzer import AnalyzerError, JobAnalysis, analyze_job
-from database.connection import already_sent, connect, record
+from database.connection import already_sent, connect, record, record_failure
 
 console = Console()
 log = logging.getLogger("jobbot.cli")
@@ -154,10 +154,12 @@ def run_batch(
             a = analyze_job(text)
         except AnalyzerError as e:
             log.error("analysis FAILED: %s", e)
+            record_failure(con, post_text=text, post_hash=h, reason=f"analysis: {e}")
             rows.append((i, first_line, "[red]failed[/]", "-", "-"))
             continue
         except Exception as e:  # network, auth, bad key...
             log.error("unexpected error: %s: %s", type(e).__name__, e)
+            record_failure(con, post_text=text, post_hash=h, reason=f"{type(e).__name__}: {e}")
             rows.append((i, first_line, "[red]error[/]", "-", "-"))
             continue
         log.info("post %d done in %.1fs", i, time.perf_counter() - started)
@@ -181,12 +183,15 @@ def run_batch(
                             pending.append((draft, a.apply_email, a, text))
                     except WriterError as e:
                         log.error("writing FAILED: %s", e)
+                        record_failure(con, post_text=text, post_hash=h, reason=f"writing: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
                         drafted = "[red]failed[/]"
             except MatcherError as e:
                 log.error("matching FAILED: %s", e)
+                record_failure(con, post_text=text, post_hash=h, reason=f"matching: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
                 projects = "[red]failed[/]"
             except Exception as e:
                 log.error("unexpected matcher/writer error: %s: %s", type(e).__name__, e)
+                record_failure(con, post_text=text, post_hash=h, reason=f"{type(e).__name__}: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
                 projects = "[red]error[/]"
         verdict = "[green]ready[/]" if a.can_auto_apply else "[yellow]no email[/]"
         rows.append(

@@ -24,6 +24,16 @@ CREATE TABLE IF NOT EXISTS applications (
     note TEXT,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS failures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    failed_at TEXT NOT NULL,
+    post_hash TEXT NOT NULL UNIQUE,
+    post_text TEXT NOT NULL,
+    company TEXT,
+    role_title TEXT,
+    to_email TEXT,
+    reason TEXT NOT NULL
+);
 """
 
 
@@ -67,5 +77,37 @@ def record(
         "INSERT INTO applications (applied_at, to_email, company, role_title, subject, post_text, post_hash, status, updated_at)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, 'sent', ?)",
         (now, to_email.lower(), company, role_title, subject, post_text, post_hash, now),
+    )
+    # it went out, so it is no longer waiting to be reapplied
+    con.execute("DELETE FROM failures WHERE post_hash = ?", (post_hash,))
+    con.commit()
+
+
+def record_failure(
+    con: sqlite3.Connection | None,
+    *,
+    post_text: str,
+    post_hash: str,
+    reason: str,
+    company: str | None = None,
+    role_title: str | None = None,
+    to_email: str | None = None,
+) -> None:
+    """Keep the post so it can be applied to again later. Re-failing the same post updates the reason."""
+    if con is None:
+        return
+    con.execute(
+        "INSERT INTO failures (failed_at, post_hash, post_text, company, role_title, to_email, reason)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)"
+        " ON CONFLICT(post_hash) DO UPDATE SET failed_at = excluded.failed_at, reason = excluded.reason",
+        (
+            datetime.now().isoformat(timespec="seconds"),
+            post_hash,
+            post_text,
+            company,
+            role_title,
+            (to_email or "").lower() or None,
+            reason[:300],
+        ),
     )
     con.commit()
