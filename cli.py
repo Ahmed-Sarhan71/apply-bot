@@ -71,6 +71,8 @@ def read_paste() -> str | None:
         try:
             line = input()
         except EOFError:
+            if not lines:  # stdin is done: quit instead of spinning forever
+                return None
             break
         if not lines and line.strip().lower() in {"quit", "exit", "q"}:
             return None

@@ -23,6 +23,15 @@ export default async function Page() {
         </Link>
       </header>
 
+      <div className="mb-6">
+        <Link
+          href="/apply"
+          className="inline-block rounded-lg border border-black/15 px-4 py-2 text-sm dark:border-white/20"
+        >
+          Paste a job post
+        </Link>
+      </div>
+
       {apps.length === 0 ? (
         <div className="rounded-xl border border-dashed border-black/20 p-10 text-center dark:border-white/20">
           <p className="font-medium">No applications yet.</p>
