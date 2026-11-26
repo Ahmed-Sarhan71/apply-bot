@@ -62,7 +62,8 @@ Rules:
 - opening: two sentences. First: "I'm applying for the <role_title> position at <company>." (leave out "at <company>" when the company is null). Second: say the candidate holds a Bachelor's degree in Computer Engineering (always use exactly this wording, even though the resume's EDUCATION section words the degree differently) and builds solutions to the employer's business need, put in plain words from business_need (do not quote it).
 - bullets: 2 or 3 items, NEVER more than 3, best fit first. Prefer the project cards the matcher selected. "label" is the project name in a few words. "text" is ONE sentence of at most 22 words with this shape: the business problem the project solves, what the candidate built, and the benefit or result, taken from that card's Problem, Solution, Business benefit, Cost and Results lines. Choose projects whose business problem resembles the employer's need and write in business terms (time saved, cost avoided, risk reduced, data kept private), naming at most two technologies. Use a benefit only if the card states it; never invent savings or figures.
 - NEVER claim a skill listed in missing_skills anywhere except acknowledged_gap: do not use its name, hint at it or imply familiarity. Claim a matched skill only where the evidence quote supports it.
-- acknowledged_gap: the style examples show the candidate being honest about ONE core requirement they lack, in one positive sentence ("Although I haven't worked directly with X in a professional environment, I'm eager to learn it."). Do the same, in at most 20 words, about the single most central required skill in missing_skills, only when it is clearly a core requirement of the job; otherwise null. Never mention years of experience or seniority and never list several gaps.
+- related_skills (a subset of missing_skills): the job names a specific tool, but the resume only lists the broader platform it belongs to (for example the job wants Azure DevOps and the resume lists Azure and CI/CD). Never name the specific tool and never apologise or admit a lack for it, and never use it in acknowledged_gap. You may mention the broader skill the resume does list, where an evidence quote supports it.
+- acknowledged_gap: the style examples show the candidate being honest about ONE core requirement they lack, in one positive sentence ("Although I haven't worked directly with X in a professional environment, I'm eager to learn it."). Do the same, in at most 20 words, about the single most central required skill in missing_skills that is NOT in related_skills, only when it is clearly a core requirement of the job; otherwise null. Never mention years of experience or seniority and never list several gaps.
 - closing: ONE sentence of at most 15 words on what the candidate would bring to this employer's business need. Do not repeat the sign-off, links or CV line, and do not list other projects; those are added automatically.
 - why_hire: when special_requirements ask for a short note on why they should hire the candidate (a brief, cover note or motivation), write two sentences at most answering it from true facts, and shorten the bullets so the length limit still holds; otherwise null.
 - Write in English, first person, professional and concise like the examples. No emojis, no markdown, no greeting, no sign-off.
@@ -227,6 +228,18 @@ def _skill_pattern(skill: str) -> re.Pattern:
     return re.compile(rf"(?<![A-Za-z0-9]){re.escape(skill.strip())}s?(?![A-Za-z0-9])", re.IGNORECASE)
 
 
+def drop_unneeded_gap(out: WriterOutput, match: MatchResult) -> None:
+    """The gap sentence is only allowed for a skill the candidate really lacks, never one the resume covers."""
+    gap = out.acknowledged_gap
+    if not gap:
+        return
+    related = {x.lower() for x in match.related_skills}
+    real = [x for x in match.missing_skills if x.lower() not in related]
+    if any(_skill_pattern(x).search(gap) for x in match.related_skills) or not any(_skill_pattern(x).search(gap) for x in real):
+        log.info("dropping the gap sentence (about a skill the resume covers or not a real gap): %s", gap)
+        out.acknowledged_gap = None
+
+
 def find_violations(
     out: WriterOutput,
     ctx: CandidateContext,
@@ -312,6 +325,7 @@ def build_job_message(job: JobAnalysis, match: MatchResult) -> str:
             "selected_projects": [{"project_id": p.project_id, "name": p.name, "reason": p.reason} for p in match.selected_projects],
             "matched_skills": [{"skill": s.skill, "evidence": s.evidence} for s in match.matched_skills],
             "missing_skills": match.missing_skills,
+            "related_skills": match.related_skills,
             "email_angle_suggestion": match.email_angle,
         },
     }
@@ -371,6 +385,7 @@ def write_email(
             log.warning("invalid JSON or schema from model (%s); retrying", last_error)
             continue
 
+        drop_unneeded_gap(out, match)
         remaining = not_already_featured(others, out)
         problems = find_violations(out, ctx, match.missing_skills, greeting, remaining)
         if not problems:

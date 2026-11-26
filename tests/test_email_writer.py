@@ -331,3 +331,17 @@ def test_email_lists_remaining_projects_and_github_in_text_and_html():
 def test_prompt_tells_the_model_not_to_list_other_projects():
     p = build_system_prompt(CTX, STYLE)
     assert "do not list other projects" in p and "GitHub" in p
+
+def test_gap_sentence_is_dropped_for_a_skill_the_resume_covers():
+    from ai.candidate_matcher import MatchResult
+    from ai.email_writer import WriterOutput, drop_unneeded_gap
+
+    match = MatchResult(missing_skills=["Azure DevOps", "Kubernetes"], related_skills=["Azure DevOps"])
+    body = dict(opening="o", bullets=[], closing="c")
+    out = WriterOutput(**body, acknowledged_gap="Although I haven't worked with Azure DevOps professionally, I'm eager to learn it.")
+    drop_unneeded_gap(out, match)
+    assert out.acknowledged_gap is None
+
+    out = WriterOutput(**body, acknowledged_gap="Although I haven't worked with Kubernetes professionally, I'm eager to learn it.")
+    drop_unneeded_gap(out, match)
+    assert out.acknowledged_gap is not None  # a real gap is still allowed

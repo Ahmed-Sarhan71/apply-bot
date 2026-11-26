@@ -102,6 +102,9 @@ class MatchResult(BaseModel):
     selected_projects: list[ProjectPick] = Field(default_factory=list)
     matched_skills: list[MatchedSkill] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
+    # subset of missing_skills: the job names a specific tool, the resume lists the broader platform
+    # (e.g. job "Azure DevOps", resume "Azure, CI/CD"). Never claimed by name, but also not a "gap" to apologise for.
+    related_skills: list[str] = Field(default_factory=list)
     experience_note: str | None = None
     email_angle: str = ""
 
@@ -205,6 +208,23 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.lower().strip())
 
 
+_GENERIC_WORDS = {
+    "experience", "development", "engineering", "engineer", "management", "software", "services", "service",
+    "systems", "system", "tools", "tool", "testing", "design", "programming", "language", "languages",
+    "knowledge", "skills", "data", "web", "cloud", "with", "and", "for", "the",
+}
+
+
+def _related_to_resume(skill: str, ctx: CandidateContext) -> bool:
+    """True if a significant word of the skill (e.g. 'Azure' in 'Azure DevOps') is listed in the resume."""
+    resume = ctx.resume_text.lower()
+    for w in re.findall(r"[a-z0-9#+.]+", skill.lower()):
+        w = w.strip(".")
+        if len(w) >= 3 and w not in _GENERIC_WORDS and re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])", resume):
+            return True
+    return False
+
+
 def _evidenced(skill: str, ctx: CandidateContext) -> bool:
     s = _norm(skill)
     if not s:
@@ -243,6 +263,9 @@ def _ground(result: MatchResult, ctx: CandidateContext) -> MatchResult:
             if _norm(m.skill) not in {_norm(x) for x in missing}:
                 missing.append(m.skill)
     result.matched_skills, result.missing_skills = matched, missing
+    result.related_skills = [x for x in missing if _related_to_resume(x, ctx)]
+    if result.related_skills:
+        log.info("related to resume skills, so not a real gap: %s", ", ".join(result.related_skills))
     return result
 
 

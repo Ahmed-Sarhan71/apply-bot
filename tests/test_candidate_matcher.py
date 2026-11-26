@@ -254,3 +254,14 @@ def test_cards_without_a_ranking_block_still_work(tmp_path):
 
 def test_prompt_tells_the_model_to_follow_the_ranking():
     assert "PROJECT RANKING" in INSTRUCTIONS and "promotions" in INSTRUCTIONS
+
+# ---------- related skills (job names a tool, resume lists the platform) ----------
+
+def test_missing_tool_of_a_listed_platform_is_related_not_a_gap(tmp_path):
+    (tmp_path / "project_cards.md").write_text(CARDS, encoding="utf-8")
+    (tmp_path / "resume.txt").write_text("Cloud & MLOps: AWS, Azure, GCP, Docker, CI/CD, Linux\n", encoding="utf-8")
+    c = load_candidate_context(tmp_path)
+    reply = {"missing_skills": ["Azure DevOps", "Kubernetes"]}
+    r = match_candidate(job(), c, client=FakeClient(reply), today=TODAY)
+    assert r.missing_skills == ["Azure DevOps", "Kubernetes"]  # still never claimed by name
+    assert r.related_skills == ["Azure DevOps"]  # but no "I haven't worked with it" for this one
