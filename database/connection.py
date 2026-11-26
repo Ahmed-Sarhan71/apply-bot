@@ -25,6 +25,18 @@ CREATE TABLE IF NOT EXISTS applications (
     note TEXT,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS inbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_hash TEXT NOT NULL UNIQUE,
+    source TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    message_id INTEGER,
+    link TEXT,
+    posted_at TEXT,
+    saved_at TEXT NOT NULL,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'done'))
+);
 CREATE TABLE IF NOT EXISTS failures (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     failed_at TEXT NOT NULL,
@@ -115,3 +127,24 @@ def record_failure(
         ),
     )
     con.commit()
+
+
+def save_inbox(
+    con: sqlite3.Connection,
+    *,
+    post_hash: str,
+    text: str,
+    channel: str,
+    message_id: int | None = None,
+    link: str | None = None,
+    posted_at: str | None = None,
+    source: str = "telegram",
+) -> bool:
+    """Save a collected post. False if the same post (same hash) was already saved, from any channel."""
+    cur = con.execute(
+        "INSERT OR IGNORE INTO inbox (post_hash, source, channel, message_id, link, posted_at, saved_at, text)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (post_hash, source, channel, message_id, link, posted_at, datetime.now().isoformat(timespec="seconds"), text),
+    )
+    con.commit()
+    return cur.rowcount == 1
