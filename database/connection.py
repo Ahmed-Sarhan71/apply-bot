@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS applications (
     subject TEXT NOT NULL,
     post_text TEXT NOT NULL,
     post_hash TEXT NOT NULL UNIQUE,
+    body TEXT,
     status TEXT NOT NULL DEFAULT 'sent' CHECK (status IN ('sent', 'replied', 'rejected', 'no_reply')),
     note TEXT,
     updated_at TEXT NOT NULL
@@ -44,6 +45,8 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.executescript(SCHEMA)
+    if "body" not in {r[1] for r in con.execute("PRAGMA table_info(applications)")}:
+        con.execute("ALTER TABLE applications ADD COLUMN body TEXT")  # older databases
     return con
 
 
@@ -71,12 +74,13 @@ def record(
     company: str | None = None,
     role_title: str | None = None,
     subject: str = "",
+    body: str = "",
 ) -> None:
     now = datetime.now().isoformat(timespec="seconds")
     con.execute(
-        "INSERT INTO applications (applied_at, to_email, company, role_title, subject, post_text, post_hash, status, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, 'sent', ?)",
-        (now, to_email.lower(), company, role_title, subject, post_text, post_hash, now),
+        "INSERT INTO applications (applied_at, to_email, company, role_title, subject, body, post_text, post_hash, status, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sent', ?)",
+        (now, to_email.lower(), company, role_title, subject, body, post_text, post_hash, now),
     )
     # it went out, so it is no longer waiting to be reapplied
     con.execute("DELETE FROM failures WHERE post_hash = ?", (post_hash,))

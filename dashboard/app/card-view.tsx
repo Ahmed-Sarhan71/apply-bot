@@ -38,6 +38,13 @@ export function Card({ app }: { app: Application }) {
         <pre className="mt-2 whitespace-pre-wrap font-sans text-sm opacity-80">{app.post_text}</pre>
       </details>
 
+      {app.body ? (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm underline">Show email sent</summary>
+          <pre className="mt-2 whitespace-pre-wrap font-sans text-sm opacity-80">{app.body}</pre>
+        </details>
+      ) : null}
+
       <form action={updateApplication} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start">
         <input type="hidden" name="id" value={app.id} />
         <select

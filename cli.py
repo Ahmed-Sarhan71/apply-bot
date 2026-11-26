@@ -232,6 +232,7 @@ def run_batch(
                     company=job_row.company,
                     role_title=job_row.role_title,
                     subject=draft.subject,
+                    body=draft.text(),
                 )
                 sent += 1
                 log.info("recorded %s (gmail id %s)", to, message_id)

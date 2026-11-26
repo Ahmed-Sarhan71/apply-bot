@@ -16,6 +16,7 @@ export type Application = {
   company: string | null;
   role_title: string | null;
   subject: string;
+  body: string | null;
   post_text: string;
   status: Status;
   note: string | null;

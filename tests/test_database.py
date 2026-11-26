@@ -9,9 +9,10 @@ def test_a_failed_post_is_kept_and_cleared_once_it_sends(tmp_path):
     assert len(rows) == 1, "same post must not pile up rows"
     assert "monitoring" in rows[0][0], "latest reason wins"
 
-    record(con, post_text="post", post_hash="h1", to_email="hr@acme.com")
+    record(con, post_text="post", post_hash="h1", to_email="hr@acme.com", subject="s", body="Dear team,\n\nhello")
     assert con.execute("SELECT COUNT(*) FROM failures").fetchone()[0] == 0
     assert already_sent(con, post_hash="h1")
+    assert "Dear team" in con.execute("SELECT body FROM applications").fetchone()[0]
 
 
 def test_record_then_already_sent(tmp_path):
