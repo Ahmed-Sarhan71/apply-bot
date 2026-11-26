@@ -68,3 +68,31 @@ export function listFailures(): Failure[] {
     db.close();
   }
 }
+
+export type InboxPost = {
+  id: number;
+  post_hash: string;
+  source: string;
+  channel: string;
+  message_id: number | null;
+  link: string | null;
+  posted_at: string | null;
+  saved_at: string;
+  text: string;
+  status: "new" | "done";
+};
+
+export function listInbox(): InboxPost[] {
+  if (!existsSync(/*turbopackIgnore: true*/ DB_PATH)) return [];
+  const db = getDb();
+  try {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'inbox'").get()) {
+      return []; // database predates the Telegram collector
+    }
+    return db
+      .prepare("SELECT * FROM inbox ORDER BY COALESCE(posted_at, saved_at) DESC, id DESC")
+      .all() as InboxPost[];
+  } finally {
+    db.close();
+  }
+}

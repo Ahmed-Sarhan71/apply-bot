@@ -18,9 +18,14 @@ export default async function Page() {
             {apps.length} total · {replied} replied · {rejected} rejected
           </p>
         </div>
-        <Link href="/table" className="text-sm underline">
-          Table view
-        </Link>
+        <div className="flex items-baseline gap-4">
+          <Link href="/table" className="text-sm underline">
+            Table view
+          </Link>
+          <Link href="/inbox" className="text-sm underline">
+            Inbox
+          </Link>
+        </div>
       </header>
 
       <div className="mb-6">

@@ -28,9 +28,14 @@ export default async function TablePage() {
             {rows.length} total · {replied} replied · {rejected} rejected
           </p>
         </div>
-        <Link href="/" className="text-sm underline">
-          Cards
-        </Link>
+        <div className="flex items-baseline gap-4">
+          <Link href="/" className="text-sm underline">
+            Cards
+          </Link>
+          <Link href="/inbox" className="text-sm underline">
+            Inbox
+          </Link>
+        </div>
       </header>
 
       {rows.length === 0 ? (

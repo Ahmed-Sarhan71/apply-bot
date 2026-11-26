@@ -5,7 +5,7 @@ One file, no server. The Next.js dashboard opens the same file read/write.
 
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DB_PATH = Path(os.environ.get("APPLYBOT_DB", "data/applications.db"))
@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS inbox (
     posted_at TEXT,
     saved_at TEXT NOT NULL,
     text TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'done'))
+    status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'done')),
+    result TEXT
 );
 CREATE TABLE IF NOT EXISTS failures (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,6 +60,8 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     con.executescript(SCHEMA)
     if "body" not in {r[1] for r in con.execute("PRAGMA table_info(applications)")}:
         con.execute("ALTER TABLE applications ADD COLUMN body TEXT")  # older databases
+    if "result" not in {r[1] for r in con.execute("PRAGMA table_info(inbox)")}:
+        con.execute("ALTER TABLE inbox ADD COLUMN result TEXT")  # inbox created before results were tracked
     return con
 
 
@@ -148,3 +151,25 @@ def save_inbox(
     )
     con.commit()
     return cur.rowcount == 1
+
+
+def inbox_new(con: sqlite3.Connection, days: int = 90, limit: int | None = None, retry_failed: bool = False) -> list[sqlite3.Row]:
+    """Posts still waiting to be processed, newest first, from the last `days` days. No limit means all of them.
+
+    Posts that failed last time (status 'new', result 'failed') are skipped unless retry_failed, so a post that
+    always breaks does not cost tokens on every run.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    return con.execute(
+        "SELECT * FROM inbox WHERE status = 'new' AND COALESCE(posted_at, saved_at) >= ?"
+        " AND (? OR result IS NULL OR result != 'failed')"
+        " ORDER BY COALESCE(posted_at, saved_at) DESC, id DESC LIMIT ?",
+        (cutoff, int(retry_failed), -1 if limit is None else limit),  # SQLite: LIMIT -1 means no limit
+    ).fetchall()
+
+
+def mark_inbox(con: sqlite3.Connection, post_hash: str, result: str) -> None:
+    """A finished post becomes 'done'. A failed one keeps status 'new' with result 'failed', so it can be retried."""
+    status = "new" if result == "failed" else "done"
+    con.execute("UPDATE inbox SET status = ?, result = ? WHERE post_hash = ?", (status, result, post_hash))
+    con.commit()
