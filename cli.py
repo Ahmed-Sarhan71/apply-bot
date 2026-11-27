@@ -36,7 +36,7 @@ from ai.email_writer import EmailDraft, WriterError, load_style_examples, write_
 from ai.job_analyzer import AnalyzerError, JobAnalysis, analyze_job
 from database.connection import already_sent, connect, inbox_new, mark_inbox, record, record_failure
 
-RECORD_FROM = "2026-10-01"  # older posts are still sent, just not listed in All Applications
+DEFAULT_LIST_FROM = "2026-10-01"  # older posts are still sent and recorded, just hidden from All Applications
 
 console = Console()
 log = logging.getLogger("jobbot.cli")
@@ -135,6 +135,7 @@ def run_batch(
     con=None,
     posts: list[str] | None = None,
     on_result: Callable[[str, str], None] | None = None,
+    list_from: str = DEFAULT_LIST_FROM,
 ) -> dict[str, str]:
     """Run the pipeline on every post, sending each email as soon as it is written.
 
@@ -223,7 +224,7 @@ def run_batch(
                                     drafted = "[red]failed[/]"
                                     outcomes[h] = "failed"
                                 else:
-                                    _record_sent(con, text, h, a, draft, message_id, a.apply_email)
+                                    _record_sent(con, text, h, a, draft, message_id, a.apply_email, list_from)
                                     drafted = "[green]sent[/]"
                                     outcomes[h] = "sent"
                         except WriterError as e:
@@ -269,15 +270,13 @@ def run_batch(
     return outcomes
 
 
-def _record_sent(con, post_text: str, h: str, job: JobAnalysis, draft: EmailDraft, message_id: str, to: str) -> None:
-    """Log the application, unless the post is older than RECORD_FROM: it was still sent, just not listed."""
+def _record_sent(con, post_text: str, h: str, job: JobAnalysis, draft: EmailDraft, message_id: str, to: str, list_from: str) -> None:
+    """Record every send so the address is never emailed twice. Posts older than list_from are just hidden."""
     if con is None:
         return
     row = con.execute("SELECT posted_at FROM inbox WHERE post_hash = ?", (h,)).fetchone()
     posted = row["posted_at"] if row else None
-    if posted is not None and posted < RECORD_FROM:
-        log.info("sent to %s but posted %s: not listed in All Applications (gmail id %s)", to, posted[:10], message_id)
-        return
+    listed = posted is None or posted >= list_from
     record(
         con,
         post_text=post_text,
@@ -287,8 +286,10 @@ def _record_sent(con, post_text: str, h: str, job: JobAnalysis, draft: EmailDraf
         role_title=job.role_title,
         subject=draft.subject,
         body=draft.text(),
+        listed=listed,
     )
-    log.info("recorded %s (gmail id %s)", to, message_id)
+    when = f"posted {posted[:10]}" if posted else "pasted by hand"
+    log.info("recorded %s, %s%s (gmail id %s)", to, when, "" if listed else ": hidden from All Applications", message_id)
 
 
 def main() -> None:
@@ -304,6 +305,11 @@ def main() -> None:
     parser.add_argument("--days", type=int, default=90, help="with --inbox: only posts from the last N days (default 90)")
     parser.add_argument("--retry-failed", action="store_true", help="with --inbox: also try the posts that failed last time")
     parser.add_argument("--limit", type=int, default=None, help="with --inbox: at most N posts per run (default: the whole inbox)")
+    parser.add_argument(
+        "--list-from",
+        default=DEFAULT_LIST_FROM,
+        help=f"posts older than this date (YYYY-MM-DD) are sent and recorded but hidden from All Applications (default {DEFAULT_LIST_FROM})",
+    )
     args = parser.parse_args()
 
     load_dotenv()
@@ -361,6 +367,7 @@ def main() -> None:
             posts=[r["text"] for r in waiting],
             # saved as it happens, so a Ctrl-C loses nothing; a dry run leaves the inbox untouched
             on_result=(lambda h, result: mark_inbox(con, h, result)) if args.send else None,
+            list_from=args.list_from,
         )
         if args.send:
             failed = sum(1 for r in waiting if outcomes.get(r["post_hash"]) == "failed")
@@ -373,14 +380,14 @@ def main() -> None:
         return
     if args.file:
         with open(args.file, encoding="utf-8") as f:
-            run_batch(f.read(), seen, args.json, ctx, style, args.send, con)
+            run_batch(f.read(), seen, args.json, ctx, style, args.send, con, list_from=args.list_from)
         return
     while True:
         raw = read_paste()
         if raw is None:
             console.print("bye")
             return
-        run_batch(raw, seen, args.json, ctx, style, args.send, con)
+        run_batch(raw, seen, args.json, ctx, style, args.send, con, list_from=args.list_from)
 
 
 if __name__ == "__main__":

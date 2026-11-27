@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS applications (
     post_text TEXT NOT NULL,
     post_hash TEXT NOT NULL UNIQUE,
     body TEXT,
+    listed INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'sent' CHECK (status IN ('sent', 'replied', 'rejected', 'no_reply')),
     note TEXT,
     updated_at TEXT NOT NULL
@@ -60,15 +61,18 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     con.executescript(SCHEMA)
     if "body" not in {r[1] for r in con.execute("PRAGMA table_info(applications)")}:
         con.execute("ALTER TABLE applications ADD COLUMN body TEXT")  # older databases
+    if "listed" not in {r[1] for r in con.execute("PRAGMA table_info(applications)")}:
+        con.execute("ALTER TABLE applications ADD COLUMN listed INTEGER NOT NULL DEFAULT 1")  # everything sent so far was listed
     if "result" not in {r[1] for r in con.execute("PRAGMA table_info(inbox)")}:
         con.execute("ALTER TABLE inbox ADD COLUMN result TEXT")  # inbox created before results were tracked
     return con
 
 
 def already_sent(con: sqlite3.Connection, post_hash: str | None = None, to_email: str | None = None) -> bool:
-    """True if this exact post (hash) or this address was applied to before."""
-    if post_hash and con.execute("SELECT 1 FROM inbox WHERE post_hash = ? AND result = 'sent' LIMIT 1", (post_hash,)).fetchone():
-        return True  # sent from the inbox but too old to be listed in All Applications
+    """True if this exact post (hash) or this address was applied to before.
+
+    Every send is recorded, so the applications guard also protects addresses that came from old, unlisted posts.
+    """
     where, args = [], []
     if post_hash:
         where.append("post_hash = ?")
@@ -92,12 +96,14 @@ def record(
     role_title: str | None = None,
     subject: str = "",
     body: str = "",
+    listed: bool = True,
 ) -> None:
+    """Save a send. `listed=False` keeps it out of the dashboard's All Applications but still guards the address."""
     now = datetime.now().isoformat(timespec="seconds")
     con.execute(
-        "INSERT INTO applications (applied_at, to_email, company, role_title, subject, body, post_text, post_hash, status, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sent', ?)",
-        (now, to_email.lower(), company, role_title, subject, body, post_text, post_hash, now),
+        "INSERT INTO applications (applied_at, to_email, company, role_title, subject, body, post_text, post_hash, listed, status, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', ?)",
+        (now, to_email.lower(), company, role_title, subject, body, post_text, post_hash, int(listed), now),
     )
     # it went out, so it is no longer waiting to be reapplied
     con.execute("DELETE FROM failures WHERE post_hash = ?", (post_hash,))

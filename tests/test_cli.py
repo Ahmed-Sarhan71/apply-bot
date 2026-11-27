@@ -41,6 +41,28 @@ def test_run_batch_reports_an_outcome_per_post(tmp_path, monkeypatch):
     assert out[cli.post_hash(good)] == "analyzed"  # the repeated copy must not overwrite the first result
 
 
+def test_a_sent_old_post_is_hidden_but_its_address_stays_blocked(tmp_path):
+    import cli
+    from ai.email_writer import Bullet, EmailDraft, WriterOutput
+    from ai.job_analyzer import JobAnalysis
+    from database.connection import already_sent, connect, save_inbox
+
+    con = connect(tmp_path / "t.db")
+    draft = EmailDraft(subject="s", greeting="Hi,", body=WriterOutput(opening="o", bullets=[Bullet(label="P", text="t")], closing="c"))
+    for h, posted, to in (
+        ("sept", "2026-09-15T10:00:00+00:00", "old@x.com"),
+        ("nov", "2026-11-05T10:00:00+00:00", "new@x.com"),
+    ):
+        save_inbox(con, post_hash=h, text=f"{h} post, mail {to}", channel="c", posted_at=posted)
+        job = JobAnalysis(role_title="R", company="C", apply_method="email", apply_email=to)
+        cli._record_sent(con, f"{h} post", h, job, draft, "id", to, cli.DEFAULT_LIST_FROM)
+
+    listed = {r["post_hash"]: r["listed"] for r in con.execute("SELECT post_hash, listed FROM applications")}
+    assert listed == {"sept": 0, "nov": 1}
+    assert already_sent(con, to_email="old@x.com")  # the old post's row is hidden, not missing
+    assert already_sent(con, post_hash="sept")
+
+
 class _FakeCtx:
     def __init__(self, resume_path):
         self.resume_path = resume_path

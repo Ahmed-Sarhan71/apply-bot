@@ -64,17 +64,36 @@ def test_old_inbox_table_gets_the_result_column(tmp_path):
     assert "result" in {r[1] for r in con.execute("PRAGMA table_info(inbox)")}
 
 
-def test_inbox_sent_counts_as_already_sent_but_analyzed_does_not(tmp_path):
-    from database.connection import mark_inbox, save_inbox
+def test_old_applications_table_gets_the_listed_column(tmp_path):
+    import sqlite3
+
+    raw = sqlite3.connect(tmp_path / "old.db")
+    raw.execute(
+        "CREATE TABLE applications (id INTEGER PRIMARY KEY AUTOINCREMENT, applied_at TEXT NOT NULL,"
+        " to_email TEXT NOT NULL UNIQUE, company TEXT, role_title TEXT, subject TEXT NOT NULL,"
+        " post_text TEXT NOT NULL, post_hash TEXT NOT NULL UNIQUE, body TEXT, status TEXT NOT NULL DEFAULT 'sent',"
+        " note TEXT, updated_at TEXT NOT NULL)"
+    )
+    raw.execute(
+        "INSERT INTO applications (applied_at, to_email, subject, post_text, post_hash, updated_at)"
+        " VALUES ('2026-09-01T10:00:00', 'a@x.com', 's', 'p', 'h1', '2026-09-01T10:00:00')"
+    )
+    raw.commit()
+    raw.close()
+    con = connect(tmp_path / "old.db")
+    assert "listed" in {r[1] for r in con.execute("PRAGMA table_info(applications)")}
+    assert con.execute("SELECT listed FROM applications").fetchone()[0] == 1  # rows written before the column stay visible
+
+
+def test_listed_flag_is_stored_and_a_hidden_row_still_blocks_its_address(tmp_path):
+    from database.connection import record
 
     con = connect(tmp_path / "t.db")
-    for h in ("sent_from_inbox", "only_analyzed"):
-        save_inbox(con, post_hash=h, text=h, channel="c", posted_at="2026-09-15T10:00:00+00:00")
-    mark_inbox(con, "sent_from_inbox", "sent")
-    mark_inbox(con, "only_analyzed", "no email")
-    # an old post sends no applications row, so this is the only record that it went out
-    assert already_sent(con, post_hash="sent_from_inbox")
-    assert not already_sent(con, post_hash="only_analyzed")
+    record(con, post_text="old", post_hash="h1", to_email="old@x.com", listed=False)
+    record(con, post_text="new", post_hash="h2", to_email="new@x.com")
+    listed = {r["post_hash"]: r["listed"] for r in con.execute("SELECT post_hash, listed FROM applications")}
+    assert listed == {"h1": 0, "h2": 1}
+    assert already_sent(con, to_email="old@x.com")  # hidden from the dashboard, not from the guard
 
 
 def test_failed_inbox_post_is_not_done_and_is_retried_only_on_request(tmp_path):

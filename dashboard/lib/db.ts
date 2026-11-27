@@ -18,12 +18,20 @@ export type Application = {
   subject: string;
   body: string | null;
   post_text: string;
+  /** 0 = sent from an old post: kept for the address guard, hidden from All Applications. */
+  listed: number;
   status: Status;
   note: string | null;
 };
 
 export function getDb() {
   return new Database(DB_PATH, { fileMustExist: true });
+}
+
+/** The dashboard can open the file before the Python side has migrated it. */
+function hasListed(db: Database.Database): boolean {
+  const cols = db.prepare("PRAGMA table_info(applications)").all() as { name: string }[];
+  return cols.some((c) => c.name === "listed");
 }
 
 export type Failure = {
@@ -51,8 +59,9 @@ export function listApplications(): Application[] {
   if (!existsSync(/*turbopackIgnore: true*/ DB_PATH)) return [];
   const db = getDb();
   try {
+    const where = hasListed(db) ? " WHERE listed = 1" : "";
     return db
-      .prepare("SELECT * FROM applications ORDER BY applied_at DESC, id DESC")
+      .prepare(`SELECT * FROM applications${where} ORDER BY applied_at DESC, id DESC`)
       .all() as Application[];
   } finally {
     db.close();
