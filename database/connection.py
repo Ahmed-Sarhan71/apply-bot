@@ -67,6 +67,8 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
 
 def already_sent(con: sqlite3.Connection, post_hash: str | None = None, to_email: str | None = None) -> bool:
     """True if this exact post (hash) or this address was applied to before."""
+    if post_hash and con.execute("SELECT 1 FROM inbox WHERE post_hash = ? AND result = 'sent' LIMIT 1", (post_hash,)).fetchone():
+        return True  # sent from the inbox but too old to be listed in All Applications
     where, args = [], []
     if post_hash:
         where.append("post_hash = ?")

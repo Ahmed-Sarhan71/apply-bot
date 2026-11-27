@@ -35,6 +35,8 @@ from ai.email_writer import EmailDraft, WriterError, load_style_examples, write_
 from ai.job_analyzer import AnalyzerError, JobAnalysis, analyze_job
 from database.connection import already_sent, connect, inbox_new, mark_inbox, record, record_failure
 
+RECORD_FROM = "2026-10-01"  # older posts are still sent, just not listed in All Applications
+
 console = Console()
 log = logging.getLogger("jobbot.cli")
 
@@ -244,19 +246,25 @@ def run_batch(
         sent = 0
         try:
             for (draft, to, job_row, post_text), message_id in zip(pending, send_all(pairs, ctx.resume_path)):
-                record(
-                    con,
-                    post_text=post_text,
-                    post_hash=post_hash(post_text),
-                    to_email=to,
-                    company=job_row.company,
-                    role_title=job_row.role_title,
-                    subject=draft.subject,
-                    body=draft.text(),
-                )
+                h = post_hash(post_text)
+                row = con.execute("SELECT posted_at FROM inbox WHERE post_hash = ?", (h,)).fetchone()
+                posted = row["posted_at"] if row else None
+                if posted is None or posted >= RECORD_FROM:
+                    record(
+                        con,
+                        post_text=post_text,
+                        post_hash=h,
+                        to_email=to,
+                        company=job_row.company,
+                        role_title=job_row.role_title,
+                        subject=draft.subject,
+                        body=draft.text(),
+                    )
+                    log.info("recorded %s (gmail id %s)", to, message_id)
+                else:
+                    log.info("sent to %s but posted %s: not listed in All Applications (gmail id %s)", to, posted[:10], message_id)
                 sent += 1
-                outcomes[post_hash(post_text)] = "sent"
-                log.info("recorded %s (gmail id %s)", to, message_id)
+                outcomes[h] = "sent"
             console.print(f"[green]sent and recorded {sent} email(s)[/]")
         except SendError as e:
             log.error("sending FAILED after %d send(s): %s", sent, e)

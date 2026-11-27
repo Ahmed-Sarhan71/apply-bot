@@ -64,6 +64,19 @@ def test_old_inbox_table_gets_the_result_column(tmp_path):
     assert "result" in {r[1] for r in con.execute("PRAGMA table_info(inbox)")}
 
 
+def test_inbox_sent_counts_as_already_sent_but_analyzed_does_not(tmp_path):
+    from database.connection import mark_inbox, save_inbox
+
+    con = connect(tmp_path / "t.db")
+    for h in ("sent_from_inbox", "only_analyzed"):
+        save_inbox(con, post_hash=h, text=h, channel="c", posted_at="2026-09-15T10:00:00+00:00")
+    mark_inbox(con, "sent_from_inbox", "sent")
+    mark_inbox(con, "only_analyzed", "no email")
+    # an old post sends no applications row, so this is the only record that it went out
+    assert already_sent(con, post_hash="sent_from_inbox")
+    assert not already_sent(con, post_hash="only_analyzed")
+
+
 def test_failed_inbox_post_is_not_done_and_is_retried_only_on_request(tmp_path):
     from datetime import datetime, timezone
 
