@@ -17,11 +17,16 @@ def test_message_has_text_html_and_cv(tmp_path):
     assert any(p.get_filename() == "cv.pdf" for p in msg.walk())
 
 
-def test_send_all_paces_between_sends_but_not_before_the_first(monkeypatch):
-    slept, sent = [], []
-    monkeypatch.setattr(es.time, "sleep", lambda s: slept.append(s))
-    monkeypatch.setattr(es, "send_email", lambda d, to, cv, service: sent.append(to) or f"id-{to}")
-    ids = list(es.send_all([(draft(), "a@x.com"), (draft(), "b@x.com"), (draft(), "c@x.com")], "cv.pdf", service=object(), delay=(5, 5)))
-    assert sent == ["a@x.com", "b@x.com", "c@x.com"]
-    assert ids == ["id-a@x.com", "id-b@x.com", "id-c@x.com"]
-    assert slept == [5, 5]
+def test_pacer_never_waits_before_the_first_send_and_subtracts_drafting_time(monkeypatch):
+    clock, slept = {"t": 1000.0}, []
+    monkeypatch.setattr(es.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(es.time, "sleep", lambda s: (slept.append(s), clock.__setitem__("t", clock["t"] + s)))
+
+    pacer = es.Pacer(delay=(60, 60))
+    pacer.wait()  # the first send goes out immediately
+    assert slept == []
+    pacer.sent()  # next send is allowed at 1060
+
+    clock["t"] += 20  # drafting the next email took 20s
+    pacer.wait()
+    assert slept == [40], "the gap is 60s, 20 of which the drafting already used"

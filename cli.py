@@ -16,6 +16,7 @@ import hashlib
 import logging
 import sys
 import time
+from collections.abc import Callable
 
 from dotenv import load_dotenv
 from rich.console import Console
@@ -30,7 +31,7 @@ from ai.candidate_matcher import (
     load_candidate_context,
     match_candidate,
 )
-from ai.email_sender import SendError, send_all
+from ai.email_sender import Pacer, SendError, get_service, send_email
 from ai.email_writer import EmailDraft, WriterError, load_style_examples, write_email
 from ai.job_analyzer import AnalyzerError, JobAnalysis, analyze_job
 from database.connection import already_sent, connect, inbox_new, mark_inbox, record, record_failure
@@ -133,10 +134,12 @@ def run_batch(
     send: bool = False,
     con=None,
     posts: list[str] | None = None,
+    on_result: Callable[[str, str], None] | None = None,
 ) -> dict[str, str]:
-    """Run the pipeline on every post. Returns {post_hash: outcome} so a caller (the inbox) can record what happened.
+    """Run the pipeline on every post, sending each email as soon as it is written.
 
     Outcomes: sent, drafted, analyzed, no email, already applied, duplicate, failed.
+    on_result(post_hash, outcome) fires once per post, whatever the outcome, so a caller can persist progress.
     """
     outcomes: dict[str, str] = {}
     posts = posts if posts is not None else split_posts(raw)
@@ -145,88 +148,117 @@ def run_batch(
         return outcomes
     log.info("received %d post(s)", len(posts))
     rows = []
-    pending: list[tuple[EmailDraft, str, JobAnalysis, str]] = []  # sent at the end so the gaps pace the batch
+    pacer = Pacer()
+    service = None
+    stop = False  # set when the failure would hit every later send (bad token, quota)
     for i, text in enumerate(posts, 1):
+        if stop:
+            break
         h = post_hash(text)
         first_line = text.splitlines()[0][:60]
         log.info("--- post %d/%d  id=%s  %d chars  %r", i, len(posts), h, len(text), first_line)
-        if h in seen:
-            log.warning("duplicate of a post already processed in this session; skipping")
-            rows.append((i, first_line, "duplicate", "-", "-"))
-            outcomes.setdefault(h, "duplicate")  # keep the real outcome of the first copy
-            continue
-        seen.add(h)
-        if con is not None and already_sent(con, post_hash=h):
-            log.warning("post %d was already applied to; skipping", i)
-            rows.append((i, first_line, "already applied", "-", "-", "-", "-"))
-            outcomes[h] = "already applied"
-            continue
-        started = time.perf_counter()
         try:
-            a = analyze_job(text)
-        except AnalyzerError as e:
-            log.error("analysis FAILED: %s", e)
-            record_failure(con, post_text=text, post_hash=h, reason=f"analysis: {e}")
-            rows.append((i, first_line, "[red]failed[/]", "-", "-"))
-            outcomes[h] = "failed"
-            continue
-        except Exception as e:  # network, auth, bad key...
-            log.error("unexpected error: %s: %s", type(e).__name__, e)
-            record_failure(con, post_text=text, post_hash=h, reason=f"{type(e).__name__}: {e}")
-            rows.append((i, first_line, "[red]error[/]", "-", "-"))
-            outcomes[h] = "failed"
-            continue
-        log.info("post %d done in %.1fs", i, time.perf_counter() - started)
-        show_result(a, as_json)
-        if con is not None and a.apply_email and already_sent(con, to_email=a.apply_email):
-            log.warning("%s was already emailed; skipping", a.apply_email)
-            rows.append((i, f"{a.role_title or '?'} / {a.company or '?'}", "already emailed", a.apply_method, a.apply_email, "-", "-"))
-            outcomes[h] = "already applied"
-            continue
-        projects, drafted = "-", "-"
-        if ctx is not None:
+            if h in seen:
+                log.warning("duplicate of a post already processed in this session; skipping")
+                rows.append((i, first_line, "duplicate", "-", "-"))
+                outcomes.setdefault(h, "duplicate")  # keep the real outcome of the first copy
+                continue
+            seen.add(h)
+            if con is not None and already_sent(con, post_hash=h):
+                log.warning("post %d was already applied to; skipping", i)
+                rows.append((i, first_line, "already applied", "-", "-", "-", "-"))
+                outcomes[h] = "already applied"
+                continue
+            started = time.perf_counter()
             try:
-                m = match_candidate(a, ctx)
-                show_match(m, as_json)
-                projects = ", ".join(str(p.project_id) for p in m.selected_projects) or "-"
-                if style is not None:
-                    try:
-                        draft = write_email(a, m, ctx, style)
-                        show_email(draft, a.apply_email, as_json, send)
-                        drafted = "[green]drafted[/]"
-                        outcomes[h] = "drafted"
-                        if send and a.can_auto_apply and a.apply_email:
-                            pending.append((draft, a.apply_email, a, text))
-                    except WriterError as e:
-                        log.error("writing FAILED: %s", e)
-                        record_failure(con, post_text=text, post_hash=h, reason=f"writing: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
-                        drafted = "[red]failed[/]"
-                        outcomes[h] = "failed"
-            except MatcherError as e:
-                log.error("matching FAILED: %s", e)
-                record_failure(con, post_text=text, post_hash=h, reason=f"matching: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
-                projects = "[red]failed[/]"
+                a = analyze_job(text)
+            except AnalyzerError as e:
+                log.error("analysis FAILED: %s", e)
+                record_failure(con, post_text=text, post_hash=h, reason=f"analysis: {e}")
+                rows.append((i, first_line, "[red]failed[/]", "-", "-"))
                 outcomes[h] = "failed"
-            except Exception as e:
-                log.error("unexpected matcher/writer error: %s: %s", type(e).__name__, e)
-                record_failure(con, post_text=text, post_hash=h, reason=f"{type(e).__name__}: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
-                projects = "[red]error[/]"
+                continue
+            except Exception as e:  # network, auth, bad key...
+                log.error("unexpected error: %s: %s", type(e).__name__, e)
+                record_failure(con, post_text=text, post_hash=h, reason=f"{type(e).__name__}: {e}")
+                rows.append((i, first_line, "[red]error[/]", "-", "-"))
                 outcomes[h] = "failed"
-        if not a.can_auto_apply and outcomes.get(h) != "failed":
-            outcomes[h] = "no email"
-        outcomes.setdefault(h, "analyzed")
-        verdict = "[green]ready[/]" if a.can_auto_apply else "[yellow]no email[/]"
-        rows.append(
-            (
-                i,
-                f"{a.role_title or '?'} / {a.company or '?'}",
-                verdict,
-                a.apply_method,
-                a.apply_email or "-",
-                projects,
-                drafted,
+                continue
+            log.info("post %d done in %.1fs", i, time.perf_counter() - started)
+            show_result(a, as_json)
+            if con is not None and a.apply_email and already_sent(con, to_email=a.apply_email):
+                log.warning("%s was already emailed; skipping", a.apply_email)
+                rows.append((i, f"{a.role_title or '?'} / {a.company or '?'}", "already emailed", a.apply_method, a.apply_email, "-", "-"))
+                outcomes[h] = "already applied"
+                continue
+            projects, drafted = "-", "-"
+            if ctx is not None:
+                try:
+                    m = match_candidate(a, ctx)
+                    show_match(m, as_json)
+                    projects = ", ".join(str(p.project_id) for p in m.selected_projects) or "-"
+                    if style is not None:
+                        try:
+                            draft = write_email(a, m, ctx, style)
+                            show_email(draft, a.apply_email, as_json, send)
+                            drafted = "[green]drafted[/]"
+                            outcomes[h] = "drafted"
+                            if send and a.can_auto_apply and a.apply_email:
+                                try:
+                                    if ctx.resume_path is None:
+                                        raise SendError("no CV file: cannot send")
+                                    service = service or get_service()
+                                    pacer.wait()  # drafting time already ate into the gap
+                                    message_id = send_email(draft, a.apply_email, ctx.resume_path, service)
+                                    pacer.sent()
+                                except SendError as e:  # auth, token, quota: every later send fails too
+                                    log.error("sending FAILED, stopping the run: %s", e)
+                                    record_failure(con, post_text=text, post_hash=h, reason=f"sending: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
+                                    drafted = "[red]failed[/]"
+                                    outcomes[h] = "failed"
+                                    stop = True
+                                except Exception as e:  # this one broke, the next may still go out
+                                    log.error("send FAILED for %s: %s: %s", a.apply_email, type(e).__name__, e)
+                                    record_failure(con, post_text=text, post_hash=h, reason=f"sending: {type(e).__name__}: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
+                                    drafted = "[red]failed[/]"
+                                    outcomes[h] = "failed"
+                                else:
+                                    _record_sent(con, text, h, a, draft, message_id, a.apply_email)
+                                    drafted = "[green]sent[/]"
+                                    outcomes[h] = "sent"
+                        except WriterError as e:
+                            log.error("writing FAILED: %s", e)
+                            record_failure(con, post_text=text, post_hash=h, reason=f"writing: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
+                            drafted = "[red]failed[/]"
+                            outcomes[h] = "failed"
+                except MatcherError as e:
+                    log.error("matching FAILED: %s", e)
+                    record_failure(con, post_text=text, post_hash=h, reason=f"matching: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
+                    projects = "[red]failed[/]"
+                    outcomes[h] = "failed"
+                except Exception as e:
+                    log.error("unexpected matcher/writer error: %s: %s", type(e).__name__, e)
+                    record_failure(con, post_text=text, post_hash=h, reason=f"{type(e).__name__}: {e}", company=a.company, role_title=a.role_title, to_email=a.apply_email)
+                    projects = "[red]error[/]"
+                    outcomes[h] = "failed"
+            if not a.can_auto_apply and outcomes.get(h) != "failed":
+                outcomes[h] = "no email"
+            outcomes.setdefault(h, "analyzed")
+            verdict = "[green]ready[/]" if a.can_auto_apply else "[yellow]no email[/]"
+            rows.append(
+                (
+                    i,
+                    f"{a.role_title or '?'} / {a.company or '?'}",
+                    verdict,
+                    a.apply_method,
+                    a.apply_email or "-",
+                    projects,
+                    drafted,
+                )
             )
-        )
+        finally:
+            if on_result is not None:
+                on_result(h, outcomes.get(h, "analyzed"))
 
     table = Table(title="batch summary")
     for col in ("#", "job", "result", "apply via", "email", "projects", "draft"):
@@ -234,54 +266,29 @@ def run_batch(
     for r in rows:
         table.add_row(*[str(x) for x in r])
     console.print(table)
-
-    if pending:
-        if con is None or ctx is None or ctx.resume_path is None:
-            log.error("cannot send: no database or no CV file")
-            for _, _, _, post_text in pending:
-                outcomes[post_hash(post_text)] = "failed"
-            return outcomes
-        log.info("sending %d email(s), 60-180s apart", len(pending))
-        pairs = [(draft, to) for draft, to, _, _ in pending]
-        sent = 0
-        try:
-            for (draft, to, job_row, post_text), message_id in zip(pending, send_all(pairs, ctx.resume_path)):
-                h = post_hash(post_text)
-                row = con.execute("SELECT posted_at FROM inbox WHERE post_hash = ?", (h,)).fetchone()
-                posted = row["posted_at"] if row else None
-                if posted is None or posted >= RECORD_FROM:
-                    record(
-                        con,
-                        post_text=post_text,
-                        post_hash=h,
-                        to_email=to,
-                        company=job_row.company,
-                        role_title=job_row.role_title,
-                        subject=draft.subject,
-                        body=draft.text(),
-                    )
-                    log.info("recorded %s (gmail id %s)", to, message_id)
-                else:
-                    log.info("sent to %s but posted %s: not listed in All Applications (gmail id %s)", to, posted[:10], message_id)
-                sent += 1
-                outcomes[h] = "sent"
-            console.print(f"[green]sent and recorded {sent} email(s)[/]")
-        except SendError as e:
-            log.error("sending FAILED after %d send(s): %s", sent, e)
-            _keep_unsent(con, pending, outcomes, str(e))
-        except Exception as e:  # network, quota, expired token...
-            log.error("sending FAILED after %d send(s): %s: %s", sent, type(e).__name__, e)
-            _keep_unsent(con, pending, outcomes, f"{type(e).__name__}: {e}")
     return outcomes
 
 
-def _keep_unsent(con, pending, outcomes: dict[str, str], reason: str) -> None:
-    """After a send error: remember every post that did not go out so it can be applied to again."""
-    for draft, to, job_row, post_text in pending:
-        h = post_hash(post_text)
-        if outcomes.get(h) != "sent":
-            outcomes[h] = "failed"
-            record_failure(con, post_text=post_text, post_hash=h, reason=f"sending: {reason}", company=job_row.company, role_title=job_row.role_title, to_email=to)
+def _record_sent(con, post_text: str, h: str, job: JobAnalysis, draft: EmailDraft, message_id: str, to: str) -> None:
+    """Log the application, unless the post is older than RECORD_FROM: it was still sent, just not listed."""
+    if con is None:
+        return
+    row = con.execute("SELECT posted_at FROM inbox WHERE post_hash = ?", (h,)).fetchone()
+    posted = row["posted_at"] if row else None
+    if posted is not None and posted < RECORD_FROM:
+        log.info("sent to %s but posted %s: not listed in All Applications (gmail id %s)", to, posted[:10], message_id)
+        return
+    record(
+        con,
+        post_text=post_text,
+        post_hash=h,
+        to_email=to,
+        company=job.company,
+        role_title=job.role_title,
+        subject=draft.subject,
+        body=draft.text(),
+    )
+    log.info("recorded %s (gmail id %s)", to, message_id)
 
 
 def main() -> None:
@@ -343,13 +350,24 @@ def main() -> None:
         if not waiting:
             console.print("[yellow]nothing new in the inbox. Run telegram_reader.py first.[/]")
             return
-        outcomes = run_batch("", seen, args.json, ctx, style, args.send, con, posts=[r["text"] for r in waiting])
+        outcomes = run_batch(
+            "",
+            seen,
+            args.json,
+            ctx,
+            style,
+            args.send,
+            con,
+            posts=[r["text"] for r in waiting],
+            # saved as it happens, so a Ctrl-C loses nothing; a dry run leaves the inbox untouched
+            on_result=(lambda h, result: mark_inbox(con, h, result)) if args.send else None,
+        )
         if args.send:
-            results = [outcomes.get(r["post_hash"], "failed") for r in waiting]
-            for r, result in zip(waiting, results):
-                mark_inbox(con, r["post_hash"], result)
-            failed = results.count("failed")
-            console.print(f"[green]marked {len(waiting) - failed} inbox post(s) as done[/]" + (f", [red]{failed} failed[/] (kept; reason in the failures table, retry with --retry-failed)" if failed else ""))
+            failed = sum(1 for r in waiting if outcomes.get(r["post_hash"]) == "failed")
+            console.print(
+                f"[green]{len(waiting) - failed} done[/]"
+                + (f", [red]{failed} failed[/] (kept; reason in the failures table, retry with --retry-failed)" if failed else "")
+            )
         else:
             console.print("[dim]dry run: the posts stay in the inbox so you can run them again with --send[/]")
         return

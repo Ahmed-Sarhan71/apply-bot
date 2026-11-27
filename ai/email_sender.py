@@ -29,6 +29,28 @@ class SendError(RuntimeError):
     pass
 
 
+class Pacer:
+    """Holds the earliest moment the next email may go out, so drafting time counts toward the gap.
+
+    The first send never waits. Call sent() right after a successful send.
+    """
+
+    def __init__(self, delay: tuple[float, float] = (MIN_DELAY, MAX_DELAY)):
+        self.delay = delay
+        self.next_send_at: float | None = None
+
+    def wait(self) -> None:
+        if self.next_send_at is None:
+            return
+        remaining = self.next_send_at - time.monotonic()
+        if remaining > 0:
+            log.info("waiting %.0fs before the next send", remaining)
+            time.sleep(remaining)
+
+    def sent(self) -> None:
+        self.next_send_at = time.monotonic() + random.uniform(*self.delay)
+
+
 def build_message(draft: EmailDraft, to: str, attachment: str | Path) -> EmailMessage:
     """Plain + HTML alternative plus the CV. The draft's CV line promises the attachment, so it is required."""
     path = Path(attachment)
@@ -73,24 +95,3 @@ def send_email(draft: EmailDraft, to: str, attachment: str | Path, service) -> s
     sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
     log.info("sent to %s (id %s)", to, sent["id"])
     return sent["id"]
-
-
-def send_all(
-    items: list[tuple[EmailDraft, str]],
-    attachment: str | Path,
-    service=None,
-    delay: tuple[float, float] = (MIN_DELAY, MAX_DELAY),
-):
-    """Send (draft, to) pairs one by one, waiting a random gap between sends but never before the first.
-
-    Yields each Gmail message id right after it is sent, so the caller records it before the next one.
-    """
-    if not items:
-        return
-    service = service or get_service()
-    for i, (draft, to) in enumerate(items):
-        if i:
-            wait = random.uniform(*delay)
-            log.info("waiting %.0fs before the next send", wait)
-            time.sleep(wait)
-        yield send_email(draft, to, attachment, service)
